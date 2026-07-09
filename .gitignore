@@ -1,0 +1,11 @@
+node_modules/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Build output — note: packages/action/dist is force-added (committed) for the Action runtime.
+dist/
+*.tsbuildinfo
+coverage/

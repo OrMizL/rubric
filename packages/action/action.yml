@@ -1,0 +1,25 @@
+name: Rubric
+description: AI review of spec vs. implementation alignment on pull requests
+inputs:
+  anthropic-api-key:
+    description: Anthropic API key used to run the review.
+    required: true
+  github-token:
+    description: Token used to read the PR and upsert the review comment.
+    required: true
+    default: "${{ github.token }}"
+  model:
+    description: Claude model id.
+    required: false
+    default: "claude-opus-4-8"
+  max-diff-tokens:
+    description: Input-token budget for the assembled diff prompt.
+    required: false
+    default: "50000"
+  fail-on-misaligned:
+    description: Fail the check when the verdict is "misaligned".
+    required: false
+    default: "false"
+runs:
+  using: node20
+  main: dist/index.cjs
