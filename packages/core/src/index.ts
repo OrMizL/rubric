@@ -11,3 +11,16 @@ export {
   type UnstatedChange,
   type Review,
 } from "./schema.js";
+
+export {
+  RUBRIC_COMMENT_MARKER,
+  type ChangedFile,
+  type LinkedIssue,
+  type PullRequestData,
+} from "./types.js";
+
+export {
+  GitHubClient,
+  type GitHubClientOptions,
+  type UpsertResult,
+} from "./github.js";
