@@ -33,3 +33,18 @@ export {
   type BudgetResult,
   type TokenCounter,
 } from "./budget.js";
+
+export {
+  buildSystemPrompt,
+  buildUserPrompt,
+  type PromptInput,
+} from "./prompt.js";
+
+export {
+  reviewPullRequest,
+  DEFAULT_MODEL,
+  DEFAULT_MAX_DIFF_TOKENS,
+  DEFAULT_MAX_OUTPUT_TOKENS,
+  type EngineOptions,
+  type ReviewInput,
+} from "./engine.js";
