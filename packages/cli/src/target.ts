@@ -29,3 +29,8 @@ export function parseTarget(input: string): Target {
             `Use a URL (https://github.com/owner/repo/pull/123) or owner/repo#123.`,
     );
 }
+
+/** Format a Target back into the `owner/repo#number` shorthand. */
+export function formatTarget(t: Target): string {
+    return `${t.owner}/${t.repo}#${t.number}`;
+}
