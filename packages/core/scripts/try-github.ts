@@ -13,9 +13,15 @@ const data = await client.getPullRequestData(owner, repo, number);
 
 console.log(`PR ${owner}/${repo}#${number}: ${data.title}`);
 console.log(`  base=${data.baseRef} head=${data.headRef} sha=${data.headSha.slice(0, 7)}`);
-console.log(`  body: ${data.body.slice(0, 120).replace(/\n/g, " ")}${data.body.length > 120 ? "…" : ""}`);
-console.log(`  linkedIssue: ${data.linkedIssue ? `#${data.linkedIssue.number} ${data.linkedIssue.title}` : "none"}`);
+console.log(
+    `  body: ${data.body.slice(0, 120).replace(/\n/g, " ")}${data.body.length > 120 ? "…" : ""}`,
+);
+console.log(
+    `  linkedIssue: ${data.linkedIssue ? `#${data.linkedIssue.number} ${data.linkedIssue.title}` : "none"}`,
+);
 console.log(`  files (${data.files.length}):`);
 for (const f of data.files) {
-  console.log(`    ${f.status.padEnd(9)} +${f.additions}/-${f.deletions} ${f.filename}${f.patch === undefined ? " [no patch]" : ""}`);
+    console.log(
+        `    ${f.status.padEnd(9)} +${f.additions}/-${f.deletions} ${f.filename}${f.patch === undefined ? " [no patch]" : ""}`,
+    );
 }

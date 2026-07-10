@@ -18,17 +18,21 @@ const budget = await truncateToBudget(ranked, 50_000, estimate);
 
 const system = buildSystemPrompt();
 const user = buildUserPrompt({
-  title: data.title,
-  body: data.body,
-  linkedIssue: data.linkedIssue,
-  diffText: budget.diffText,
-  truncated: budget.truncated,
+    title: data.title,
+    body: data.body,
+    linkedIssue: data.linkedIssue,
+    diffText: budget.diffText,
+    truncated: budget.truncated,
 });
 
 console.log("=".repeat(70));
 console.log(`PROMPT for ${owner}/${repo}#${number} — "${data.title}"`);
-console.log(`files: ${data.files.length} changed → ${budget.files.length} kept, ${budget.omitted.length} omitted | truncated=${budget.truncated}`);
-console.log(`~${estimate(system)} est. system tokens, ~${estimate(user)} est. user tokens (ROUGH estimate, not real counts)`);
+console.log(
+    `files: ${data.files.length} changed → ${budget.files.length} kept, ${budget.omitted.length} omitted | truncated=${budget.truncated}`,
+);
+console.log(
+    `~${estimate(system)} est. system tokens, ~${estimate(user)} est. user tokens (ROUGH estimate, not real counts)`,
+);
 console.log("=".repeat(70));
 console.log("\n########## SYSTEM PROMPT ##########\n");
 console.log(system);
