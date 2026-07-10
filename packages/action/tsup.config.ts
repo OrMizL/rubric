@@ -6,7 +6,7 @@ export default defineConfig({
     entry: { index: "src/main.ts" },
     format: ["cjs"],
     platform: "node",
-    target: "node20",
+    target: "node24",
     noExternal: [/./],
     clean: true,
     outDir: "dist",

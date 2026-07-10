@@ -18,6 +18,8 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm -r typecheck
+      # Build first: @rubric/core is consumed via its built dist/index.d.ts,
+      # so typecheck of the dependent packages needs it to exist.
       - run: pnpm -r build
+      - run: pnpm -r typecheck
       - run: pnpm -r test
