@@ -1,0 +1,26 @@
+name: Rubric
+
+# Review every pull request for intent-vs-implementation alignment.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# The Action reads the PR and (with comment: true) posts a review comment.
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      # Check out the repo so we can run the action from its local path,
+      # which dogfoods the exact code on this branch.
+      - uses: actions/checkout@v4
+
+      - uses: ./packages/action
+        with:
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          comment: true
+          fail-on-misaligned: false
