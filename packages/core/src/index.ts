@@ -32,6 +32,8 @@ export {
 
 export { buildSystemPrompt, buildUserPrompt, type PromptInput } from "./prompt.js";
 
+export { reviewToMarkdown, type RenderContext } from "./render.js";
+
 export {
     reviewPullRequest,
     DEFAULT_MODEL,

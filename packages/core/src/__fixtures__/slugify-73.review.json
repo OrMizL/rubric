@@ -1,42 +1,42 @@
 {
-    "verdict": "aligned",
-    "summary": "The PR moves the contraction/possession removal to operate on the raw input string (matching apostrophes) before the main slug pattern replacement, exactly as described. This correctly avoids the reported bug where slugified strings ending in `-s`/`-t` were wrongly modified, and a regression test is added.",
-    "claims": [
-        {
-            "id": "c1",
-            "text": "Perform the contraction/possession replacement before the main pattern replacement",
-            "status": "implemented",
-            "evidence": [{ "file": "index.js", "lines": "78-84" }],
-            "explanation": "The new replace call using the apostrophe pattern is now placed above `string.replace(patternSlug, ...)`, whereas previously the dash-based replacement occurred after it."
-        },
-        {
-            "id": "c2",
-            "text": "Perform the replacement on the input string instead of the already slugified string",
-            "status": "implemented",
-            "evidence": [{ "file": "index.js", "lines": "78-80" }],
-            "explanation": "The regex now matches on apostrophes (`'([ts])`) which only exist in the raw/lowercased input, not in the slug where they'd have been converted to separators. This confirms the operation runs on pre-slugified text."
-        },
-        {
-            "id": "c3",
-            "text": "Fixes #72 — partial strings ending in `-s`/`-t` are no longer incorrectly modified",
-            "status": "implemented",
-            "evidence": [
-                { "file": "index.js", "lines": "78-80" },
-                { "file": "test.js", "lines": "37" }
-            ],
-            "explanation": "Because the pattern now keys off apostrophes rather than dashes, a slug like `article-t` is untouched. The added test `slugify('it-s-hould-not-modify-t-his')` asserting an unchanged result verifies this behavior."
-        },
-        {
-            "id": "c4",
-            "text": "Implicit: no unrelated behavior changes",
-            "status": "implemented",
-            "evidence": [
-                { "file": "index.js", "lines": "75-88" },
-                { "file": "test.js", "lines": "34-38" }
-            ],
-            "explanation": "Existing possessive/contraction tests (Conway's, Don't, parents') remain and the only changes are the relocated/reworked replacement plus one added regression test."
-        }
-    ],
-    "unstatedChanges": [],
-    "truncated": false
+  "verdict": "aligned",
+  "summary": "The PR moves the contraction/possession removal to operate on the raw input string (matching apostrophes) before the main slug pattern replacement, exactly as described. This correctly avoids the reported bug where slugified strings ending in `-s`/`-t` were wrongly modified, and a regression test is added.",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Perform the contraction/possession replacement before the main pattern replacement",
+      "status": "implemented",
+      "evidence": [{ "file": "index.js", "lines": "78-84" }],
+      "explanation": "The new replace call using the apostrophe pattern is now placed above `string.replace(patternSlug, ...)`, whereas previously the dash-based replacement occurred after it."
+    },
+    {
+      "id": "c2",
+      "text": "Perform the replacement on the input string instead of the already slugified string",
+      "status": "implemented",
+      "evidence": [{ "file": "index.js", "lines": "78-80" }],
+      "explanation": "The regex now matches on apostrophes (`'([ts])`) which only exist in the raw/lowercased input, not in the slug where they'd have been converted to separators. This confirms the operation runs on pre-slugified text."
+    },
+    {
+      "id": "c3",
+      "text": "Fixes #72 — partial strings ending in `-s`/`-t` are no longer incorrectly modified",
+      "status": "implemented",
+      "evidence": [
+        { "file": "index.js", "lines": "78-80" },
+        { "file": "test.js", "lines": "37" }
+      ],
+      "explanation": "Because the pattern now keys off apostrophes rather than dashes, a slug like `article-t` is untouched. The added test `slugify('it-s-hould-not-modify-t-his')` asserting an unchanged result verifies this behavior."
+    },
+    {
+      "id": "c4",
+      "text": "Implicit: no unrelated behavior changes",
+      "status": "implemented",
+      "evidence": [
+        { "file": "index.js", "lines": "75-88" },
+        { "file": "test.js", "lines": "34-38" }
+      ],
+      "explanation": "Existing possessive/contraction tests (Conway's, Don't, parents') remain and the only changes are the relocated/reworked replacement plus one added regression test."
+    }
+  ],
+  "unstatedChanges": [],
+  "truncated": false
 }

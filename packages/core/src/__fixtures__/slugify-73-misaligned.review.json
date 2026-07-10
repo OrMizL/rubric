@@ -1,33 +1,33 @@
 {
-    "verdict": "misaligned",
-    "summary": "The PR claims to be a documentation-only change adding an Installation section to the README, but the diff contains no README changes at all. Instead, it modifies the core slugify logic in index.js and adds a test case, directly contradicting the stated intent.",
-    "claims": [
-        {
-            "id": "c1",
-            "text": "Adds an Installation section to the README covering npm install and yarn add commands",
-            "status": "missing",
-            "evidence": [],
-            "explanation": "No README file appears in the diff. The claimed documentation addition is entirely absent."
-        },
-        {
-            "id": "c2",
-            "text": "No code or behavior changes",
-            "status": "contradicted",
-            "evidence": [{ "file": "index.js", "lines": "75-84" }],
-            "explanation": "index.js is modified: the contraction/possessive detection was moved earlier and its regex changed from matching hyphen-delimited patterns (/([a-zA-Z\\d]+)-([ts])(-|$)/) to apostrophe-delimited patterns (/([a-zA-Z\\d]+)'([ts])(\\s|$)/). This is a substantive behavior change, directly contradicting the 'no code or behavior changes' claim."
-        }
-    ],
-    "unstatedChanges": [
-        {
-            "file": "index.js",
-            "description": "Reordered and rewrote the contraction/possessive handling regex, changing it from operating on hyphenated output to operating on raw apostrophes before slug pattern replacement — a real behavioral change to slug generation.",
-            "risk": "high"
-        },
-        {
-            "file": "test.js",
-            "description": "Added a test asserting that 'it-s-hould-not-modify-t-his' is left unchanged, reflecting the behavior change in index.js.",
-            "risk": "medium"
-        }
-    ],
-    "truncated": false
+  "verdict": "misaligned",
+  "summary": "The PR claims to be a documentation-only change adding an Installation section to the README, but the diff contains no README changes at all. Instead, it modifies the core slugify logic in index.js and adds a test case, directly contradicting the stated intent.",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Adds an Installation section to the README covering npm install and yarn add commands",
+      "status": "missing",
+      "evidence": [],
+      "explanation": "No README file appears in the diff. The claimed documentation addition is entirely absent."
+    },
+    {
+      "id": "c2",
+      "text": "No code or behavior changes",
+      "status": "contradicted",
+      "evidence": [{ "file": "index.js", "lines": "75-84" }],
+      "explanation": "index.js is modified: the contraction/possessive detection was moved earlier and its regex changed from matching hyphen-delimited patterns (/([a-zA-Z\\d]+)-([ts])(-|$)/) to apostrophe-delimited patterns (/([a-zA-Z\\d]+)'([ts])(\\s|$)/). This is a substantive behavior change, directly contradicting the 'no code or behavior changes' claim."
+    }
+  ],
+  "unstatedChanges": [
+    {
+      "file": "index.js",
+      "description": "Reordered and rewrote the contraction/possessive handling regex, changing it from operating on hyphenated output to operating on raw apostrophes before slug pattern replacement — a real behavioral change to slug generation.",
+      "risk": "high"
+    },
+    {
+      "file": "test.js",
+      "description": "Added a test asserting that 'it-s-hould-not-modify-t-his' is left unchanged, reflecting the behavior change in index.js.",
+      "risk": "medium"
+    }
+  ],
+  "truncated": false
 }
