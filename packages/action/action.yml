@@ -16,10 +16,21 @@ inputs:
     description: Input-token budget for the assembled diff prompt.
     required: false
     default: "50000"
+  comment:
+    description: >-
+      Post (or update) the review as a PR comment. When false, the report is
+      written to the job summary only. Report-only by default.
+    required: false
+    default: "false"
   fail-on-misaligned:
     description: Fail the check when the verdict is "misaligned".
     required: false
     default: "false"
+outputs:
+  verdict:
+    description: The review verdict — aligned, partially_aligned, or misaligned.
+  misaligned:
+    description: '"true" when the verdict is misaligned, otherwise "false".'
 runs:
   using: node20
   main: dist/index.cjs
