@@ -11,11 +11,33 @@ export const misalignedReview = misalignedFixture as Review;
 
 export interface FixtureOption {
     id: "aligned" | "misaligned";
+    /** Toggle label. */
     label: string;
+    /** Faux PR-chrome metadata so the demo reads like a real review artifact. */
+    repo: string;
+    branch: string;
+    prNumber: number;
+    prTitle: string;
     review: Review;
 }
 
 export const fixtureOptions: FixtureOption[] = [
-    { id: "aligned", label: "Aligned", review: alignedReview },
-    { id: "misaligned", label: "Misaligned", review: misalignedReview },
+    {
+        id: "aligned",
+        label: "Aligned",
+        repo: "sindresorhus/slugify",
+        branch: "fix/contraction-order",
+        prNumber: 73,
+        prTitle: "Fix contraction handling so partial `-s` / `-t` slugs aren't mangled",
+        review: alignedReview,
+    },
+    {
+        id: "misaligned",
+        label: "Misaligned",
+        repo: "sindresorhus/slugify",
+        branch: "docs/add-installation",
+        prNumber: 74,
+        prTitle: "Docs: add an Installation section to the README",
+        review: misalignedReview,
+    },
 ];
