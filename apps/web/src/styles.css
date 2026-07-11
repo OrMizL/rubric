@@ -1,0 +1,219 @@
+:root {
+    color-scheme: light;
+    --color-bg: #f7f7f5;
+    --color-surface: #ffffff;
+    --color-border: #e2e2e0;
+    --color-text: #1f2328;
+    --color-muted: #57606a;
+    --color-accent: #1f6feb;
+    font-family:
+        -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-text);
+}
+
+.page {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 48px 24px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+.page__header {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.hook {
+    margin: 0;
+    font-size: 2rem;
+    line-height: 1.25;
+}
+
+.blurb {
+    margin: 0;
+    max-width: 640px;
+    color: var(--color-muted);
+    line-height: 1.6;
+}
+
+.page__main {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.toggle {
+    display: inline-flex;
+    align-self: flex-start;
+    padding: 4px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+}
+
+.toggle__button {
+    border: none;
+    background: transparent;
+    padding: 8px 18px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--color-muted);
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.toggle__button--active {
+    background: var(--color-text);
+    color: var(--color-surface);
+}
+
+.review-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.verdict-badge {
+    display: inline-block;
+    font-weight: 700;
+    font-size: 1.1rem;
+    padding: 6px 12px;
+    border-radius: 8px;
+    background: #eef1f4;
+}
+
+.verdict-badge--aligned {
+    background: #dafbe1;
+    color: #116329;
+}
+
+.verdict-badge--partially_aligned {
+    background: #fff8c5;
+    color: #7d4e00;
+}
+
+.verdict-badge--misaligned {
+    background: #ffebe9;
+    color: #82071e;
+}
+
+.review-card__summary {
+    margin: 0;
+    line-height: 1.6;
+}
+
+.review-card__section-title {
+    margin: 0;
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-muted);
+}
+
+.claims-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.claims-table th {
+    text-align: left;
+    font-size: 0.8rem;
+    color: var(--color-muted);
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.claims-table td {
+    vertical-align: top;
+    padding: 10px 8px;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.claims-table__status {
+    width: 32px;
+    text-align: center;
+    font-size: 1.1rem;
+}
+
+.claims-table__text {
+    font-weight: 600;
+}
+
+.claims-table__explanation {
+    margin-top: 4px;
+    font-size: 0.85rem;
+    color: var(--color-muted);
+    line-height: 1.5;
+}
+
+.claims-table__evidence {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    white-space: pre-line;
+    color: var(--color-muted);
+}
+
+.claims-table__empty {
+    color: var(--color-muted);
+    font-style: italic;
+}
+
+.unstated-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.unstated-list {
+    margin: 0;
+    padding-left: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.unstated-list li {
+    line-height: 1.5;
+}
+
+.unstated-list__risk {
+    font-size: 1rem;
+}
+
+.review-card__truncated-note {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--color-muted);
+}
+
+.page__footer {
+    padding-top: 8px;
+    border-top: 1px solid var(--color-border);
+    font-size: 0.9rem;
+}
+
+.page__footer a {
+    color: var(--color-accent);
+    text-decoration: none;
+}
+
+.page__footer a:hover {
+    text-decoration: underline;
+}
