@@ -19,6 +19,11 @@ console.log(
 console.log(
     `  linkedIssue: ${data.linkedIssue ? `#${data.linkedIssue.number} ${data.linkedIssue.title}` : "none"}`,
 );
+console.log(`  labels: ${data.labels.length > 0 ? data.labels.join(", ") : "none"}`);
+console.log(`  commits (${data.commits.length}):`);
+for (const c of data.commits) {
+    console.log(`    ${c.sha.slice(0, 7)} ${c.message.split("\n", 1)[0]}`);
+}
 console.log(`  files (${data.files.length}):`);
 for (const f of data.files) {
     console.log(

@@ -21,6 +21,12 @@ export interface LinkedIssue {
     body: string;
 }
 
+/** One commit on the PR branch. Only the message carries review signal. */
+export interface Commit {
+    sha: string;
+    message: string;
+}
+
 /** Everything the engine needs about a PR: intent (title/body/issue) + the diff. */
 export interface PullRequestData {
     owner: string;
@@ -32,5 +38,9 @@ export interface PullRequestData {
     headRef: string;
     headSha: string;
     linkedIssue: LinkedIssue | null;
+    /** Label names attached to the PR. */
+    labels: string[];
+    /** Commits on the PR branch, capped at MAX_COMMITS (newest page from GitHub). */
+    commits: Commit[];
     files: ChangedFile[];
 }

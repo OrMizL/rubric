@@ -2,6 +2,7 @@ import { Octokit } from "@octokit/rest";
 import {
     RUBRIC_COMMENT_MARKER,
     type ChangedFile,
+    type Commit,
     type LinkedIssue,
     type PullRequestData,
 } from "./types.js";
@@ -14,6 +15,10 @@ export interface GitHubClientOptions {
 
 /** Closing-keyword reference to an issue, e.g. "fixes #42" / "Closes #7". */
 const LINKED_ISSUE_RE = /(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/i;
+
+// One page is the cap: commit messages are a signal, not the payload. A PR with
+// more than 100 commits gets the first page, which is plenty to judge intent.
+const MAX_COMMITS = 100;
 
 export interface UpsertResult {
     id: number;
@@ -36,7 +41,9 @@ export class GitHubClient {
         owner: string,
         repo: string,
         number: number,
-    ): Promise<Omit<PullRequestData, "linkedIssue" | "files" | "owner" | "repo" | "number">> {
+    ): Promise<
+        Omit<PullRequestData, "linkedIssue" | "files" | "commits" | "owner" | "repo" | "number">
+    > {
         const { data } = await this.octokit.pulls.get({ owner, repo, pull_number: number });
         return {
             title: data.title,
@@ -44,6 +51,7 @@ export class GitHubClient {
             baseRef: data.base.ref,
             headRef: data.head.ref,
             headSha: data.head.sha,
+            labels: data.labels.map((l) => l.name),
         };
     }
 
@@ -82,6 +90,17 @@ export class GitHubClient {
         }));
     }
 
+    /** Commit messages on the PR branch. A single page is requested, so this caps at MAX_COMMITS. */
+    async getCommits(owner: string, repo: string, number: number): Promise<Commit[]> {
+        const { data } = await this.octokit.pulls.listCommits({
+            owner,
+            repo,
+            pull_number: number,
+            per_page: MAX_COMMITS,
+        });
+        return data.map((c) => ({ sha: c.sha, message: c.commit.message }));
+    }
+
     /** One call that assembles everything the engine needs about a PR. */
     async getPullRequestData(
         owner: string,
@@ -89,11 +108,13 @@ export class GitHubClient {
         number: number,
     ): Promise<PullRequestData> {
         const pr = await this.getPullRequest(owner, repo, number);
-        const [linkedIssue, files] = await Promise.all([
+        const [linkedIssue, files, commits] = await Promise.all([
             this.getLinkedIssue(owner, repo, pr.body),
             this.getFiles(owner, repo, number),
+            // Commits are a nice-to-have signal; a failure here must not sink the review.
+            this.getCommits(owner, repo, number).catch(() => [] as Commit[]),
         ]);
-        return { owner, repo, number, ...pr, linkedIssue, files };
+        return { owner, repo, number, ...pr, linkedIssue, files, commits };
     }
 
     /**
