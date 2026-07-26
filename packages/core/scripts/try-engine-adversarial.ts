@@ -37,12 +37,20 @@ console.log(JSON.stringify(review, null, 2));
 
 // Thin-context case: a bare title and nothing else. Inference should still
 // produce expectations, and the signal score should land in the low band.
+//
+// commits and labels must be cleared too, not just title/body. Spreading `...data`
+// alone leaves slugify#73's real commit messages in context, and inference reads
+// them — the first version of this scenario derived accurate contraction/apostrophe
+// expectations from the commits and scored well outside the low band, testing the
+// opposite of what it claimed to.
 const thin = await reviewPullRequest(
     gatherContext({
         ...data,
         title: "fix: prevent double-click on submit",
         body: "",
         linkedIssue: null,
+        commits: [],
+        labels: [],
     }),
     data.files,
     { anthropicApiKey: apiKey },
