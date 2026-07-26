@@ -56,7 +56,12 @@ export function isTestFile(filename: string): boolean {
     const name = basename(filename);
     return (
         /(^|\/)(__tests__|tests?|spec|__mocks__)\//.test(filename) ||
-        /\.(test|spec)\.[cm]?[jt]sx?$/.test(name)
+        /\.(test|spec)\.[cm]?[jt]sx?$/.test(name) ||
+        // A file named exactly `test.js` / `spec.ts` is the AVA and node:test
+        // convention — and it is what slugify#73, this repo's own canonical
+        // example PR, actually uses. Missing it scored that PR 0/20 on "tests
+        // touched" while it was demonstrably changing its test file.
+        /^(test|spec)\.[cm]?[jt]sx?$/.test(name)
     );
 }
 

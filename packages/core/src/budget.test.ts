@@ -64,6 +64,12 @@ describe("rankFiles", () => {
             "docs/guide.md",
         ]);
     });
+
+    it("ranks a bare test.js as tests, not src", () => {
+        // AVA / node:test convention, used by slugify#73 — the canonical example PR.
+        const ranked = rankFiles([file("test.js"), file("index.js")]).map((f) => f.filename);
+        expect(ranked).toEqual(["index.js", "test.js"]);
+    });
 });
 
 describe("truncateToBudget", () => {

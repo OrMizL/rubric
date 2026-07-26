@@ -37,13 +37,18 @@ Not part of `pnpm test` — they hit the network.
 ```bash
 GITHUB_TOKEN=$(gh auth token) pnpm exec tsx packages/core/scripts/try-github.ts      # free
 GITHUB_TOKEN=$(gh auth token) pnpm exec tsx packages/core/scripts/show-prompt.ts     # free
+GITHUB_TOKEN=$(gh auth token) pnpm exec tsx packages/core/scripts/try-infer.ts       # free
 GITHUB_TOKEN=$(gh auth token) node --env-file=.env --import tsx \
-  packages/core/scripts/try-engine.ts                                               # PAID
+  packages/core/scripts/try-engine.ts [--misaligned]                                # PAID
 GITHUB_TOKEN=$(gh auth token) node --env-file=.env --import tsx \
-  packages/core/scripts/try-engine-adversarial.ts                                   # PAID
+  packages/core/scripts/try-engine-adversarial.ts                                   # PAID ×4
 ```
 
-`try-engine-adversarial.ts` is the prompt-quality regression check: it feeds a real code-only diff with a fabricated docs-only description and expects `misaligned`. Run it after touching `prompt.ts`.
+`try-infer.ts` prints the signal breakdown and the assembled inference prompt for a real PR without spending anything — the fastest way to confirm the prompt carries no patch text after touching `context.ts` or `infer.ts`.
+
+`try-engine-adversarial.ts` is the prompt-quality regression check, and now runs two scenarios: a real code-only diff with a fabricated docs-only description (expects `misaligned`), and a bare-title PR (expects inferred items plus a low signal band). Run it after touching `prompt.ts` or `infer.ts`.
+
+`try-engine.ts --misaligned` regenerates the trap fixture by pairing the real diff with that same fabricated description.
 
 Env: `ANTHROPIC_API_KEY` (required for engine runs), `GITHUB_TOKEN`/`GH_TOKEN` (optional; rate limits + private repos). Local `.env` is gitignored.
 

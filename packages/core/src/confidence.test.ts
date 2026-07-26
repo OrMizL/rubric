@@ -78,6 +78,13 @@ describe("tests component", () => {
         const withTest = ctx({ fileSummary: [file("src/a.ts"), file("src/a.test.ts")] });
         expect(earned(scoreSignal(withTest), "tests")).toBe(20);
     });
+
+    it("credits a bare test.js", () => {
+        // slugify#73 changes index.js and test.js; scoring it 0 here understated
+        // the signal by 20 points and wrongly dropped the band to "low".
+        const avaStyle = ctx({ fileSummary: [file("index.js"), file("test.js")] });
+        expect(earned(scoreSignal(avaStyle), "tests")).toBe(20);
+    });
 });
 
 describe("focus component", () => {
