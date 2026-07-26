@@ -26,6 +26,7 @@ async function run(): Promise<void> {
     const model = core.getInput("model") || undefined;
     const maxDiffTokensRaw = core.getInput("max-diff-tokens");
     const maxDiffTokens = maxDiffTokensRaw ? Number(maxDiffTokensRaw) : undefined;
+    const shouldInfer = core.getBooleanInput("infer");
     const shouldComment = core.getBooleanInput("comment");
     const failOnMisaligned = core.getBooleanInput("fail-on-misaligned");
 
@@ -37,6 +38,7 @@ async function run(): Promise<void> {
         anthropicApiKey: apiKey,
         model,
         maxDiffTokens,
+        infer: shouldInfer,
         logger: (m) => core.info(m),
     });
 
@@ -52,6 +54,7 @@ async function run(): Promise<void> {
 
     core.setOutput("verdict", review.verdict);
     core.setOutput("misaligned", String(review.verdict === "misaligned"));
+    core.setOutput("signal-score", String(review.signalScore.total));
 
     if (shouldComment) {
         const result = await gh.upsertComment(owner, repo, number, markdown);

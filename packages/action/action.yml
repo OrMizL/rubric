@@ -16,6 +16,12 @@ inputs:
     description: Input-token budget for the assembled diff prompt.
     required: false
     default: "50000"
+  infer:
+    description: >-
+      Infer the implied specification from PR context before reviewing. Adds a
+      second Claude call, roughly doubling cost. Disable for stated claims only.
+    required: false
+    default: "true"
   comment:
     description: >-
       Post (or update) the review as a PR comment. When false, the report is
@@ -31,6 +37,8 @@ outputs:
     description: The review verdict — aligned, partially_aligned, or misaligned.
   misaligned:
     description: '"true" when the verdict is misaligned, otherwise "false".'
+  signal-score:
+    description: How much intent signal the PR carried, 0-100.
 runs:
   using: node24
   main: dist/index.cjs

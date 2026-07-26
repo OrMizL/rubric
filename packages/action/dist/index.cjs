@@ -51169,6 +51169,7 @@ async function run() {
   const model = getInput("model") || void 0;
   const maxDiffTokensRaw = getInput("max-diff-tokens");
   const maxDiffTokens = maxDiffTokensRaw ? Number(maxDiffTokensRaw) : void 0;
+  const shouldInfer = getBooleanInput("infer");
   const shouldComment = getBooleanInput("comment");
   const failOnMisaligned = getBooleanInput("fail-on-misaligned");
   const gh = new GitHubClient({ token });
@@ -51178,6 +51179,7 @@ async function run() {
     anthropicApiKey: apiKey,
     model,
     maxDiffTokens,
+    infer: shouldInfer,
     logger: (m) => info(m)
   });
   const markdown = reviewToMarkdown(review, {
@@ -51189,6 +51191,7 @@ async function run() {
   await summary.addRaw(markdown).write();
   setOutput("verdict", review.verdict);
   setOutput("misaligned", String(review.verdict === "misaligned"));
+  setOutput("signal-score", String(review.signalScore.total));
   if (shouldComment) {
     const result = await gh.upsertComment(owner, repo, number4, markdown);
     info(`${result.created ? "Posted" : "Updated"} review comment (#${result.id}).`);
