@@ -63,6 +63,9 @@ patches         truncate       diff          schema out
 - **`types.ts`** — shared interfaces threaded through the whole pipeline (`ChangedFile`, `PullRequestData`, `RUBRIC_COMMENT_MARKER`).
 - **`github.ts`** — Octokit wrapper. `getPullRequestData()` is the single fetch entry point; parses closing keywords (`fixes #42`) to pull the linked issue. `upsertComment()` is the _only_ write.
 - **`budget.ts`** — pure and unit-tested. `filterFiles` (drops lockfiles/`*.min.*`/`dist/`/`.snap`/patchless files) → `rankFiles` (stable sort: src > config > tests > docs > other) → `truncateToBudget`. Takes an injected `TokenCounter` so tests pass a sync fake.
+- **`context.ts`** — `gatherContext()`. Owns what the inference stage may see; `FileSummary` has no `patch` field, making diff-blindness a type guarantee.
+- **`confidence.ts`** — `scoreSignal()`. Pure, mechanical 0–100 signal score. Weights and thresholds are exported constants.
+- **`infer.ts`** — the diff-blind inference call producing `ImpliedSpec`.
 - **`schema.ts`** — the Zod `ReviewSchema` that _is_ the contract. Structured output, not prose parsing — that's why evidence becomes permalinks and verdicts can drive CI.
 - **`prompt.ts`** — system prompt (the product's actual behavior spec) + user prompt assembly.
 - **`engine.ts`** — orchestrates the above into one `client.messages.parse` call with `zodOutputFormat`.
@@ -79,6 +82,9 @@ Consumers: `packages/action/src/main.ts` (job summary always; PR comment opt-in)
 - **Single idempotent comment.** `upsertComment` finds the existing comment by the hidden `<!-- rubric-review -->` marker that `reviewToMarkdown` emits. Re-running must never spam a PR. Any renderer change must keep emitting the marker first.
 - **`comment: false` by default.** The Action is report-only; the CLI never writes at all. Respect for repos you don't own is a design position, not an oversight.
 - **`packages/action/dist/index.cjs` is committed** (force-added past the gitignored `dist/`) — GitHub Actions runs it with no install step. Rebuild and commit it whenever `packages/action` or `packages/core` changes, or the Action ships stale code. Both action and CLI bundle with `noExternal: [/./]`.
+- **Inference never sees patches.** `ReviewContext.fileSummary` structurally cannot carry one, and `infer.test.ts` asserts the assembled prompt has no `@@` hunks. Do not add a patch field to reach it "just this once."
+- **Claim provenance is code-owned.** `statedClaims` and `inferredClaims` are separate arrays; the engine clears `inferredClaims` when inference did not run. Never add a model-authored `source` tag.
+- **The model is never asked for code-owned facts.** `ReviewOutputSchema` is what the model fills; `truncated`, `signalScore`, and `inference` are attached afterward by `engine.ts`.
 
 ## Conventions
 

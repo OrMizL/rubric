@@ -111,18 +111,19 @@ jobs:
           comment: true # opt in to PR comments; default is report-only
 ```
 
-| Input                | Default               | Description                                    |
-| -------------------- | --------------------- | ---------------------------------------------- |
-| `anthropic-api-key`  | —                     | **Required.** Your Anthropic API key.          |
-| `github-token`       | `${{ github.token }}` | Reads the PR and (opt-in) posts the comment.   |
-| `model`              | `claude-opus-4-8`     | Claude model id.                               |
-| `max-diff-tokens`    | `50000`               | Token budget for the diff.                     |
-| `comment`            | `false`               | Post the review as a PR comment.               |
-| `fail-on-misaligned` | `false`               | Fail the check when the verdict is misaligned. |
+| Input                | Default               | Description                                         |
+| -------------------- | --------------------- | --------------------------------------------------- |
+| `anthropic-api-key`  | —                     | **Required.** Your Anthropic API key.               |
+| `github-token`       | `${{ github.token }}` | Reads the PR and (opt-in) posts the comment.        |
+| `model`              | `claude-opus-4-8`     | Claude model id.                                    |
+| `max-diff-tokens`    | `50000`               | Token budget for the diff.                          |
+| `infer`              | `true`                | Infer the implied spec before reviewing (2nd call). |
+| `comment`            | `false`               | Post the review as a PR comment.                    |
+| `fail-on-misaligned` | `false`               | Fail the check when the verdict is misaligned.      |
 
 By default the Action is **report-only** — it writes the review to the workflow
-job summary and never comments unless you set `comment: true`. Outputs `verdict`
-and `misaligned` let later steps branch on the result.
+job summary and never comments unless you set `comment: true`. Outputs `verdict`,
+`misaligned`, and `signal-score` let later steps branch on the result.
 
 ### As a CLI — scan _any_ PR, read-only, from your terminal
 
@@ -136,32 +137,45 @@ node packages/cli/dist/rubric.cjs scan sindresorhus/slugify#73
 ```
 
 Accepts a PR URL or `owner/repo#123`. Useful flags: `--json`, `--markdown`,
-`--model`, `--fail-on-misaligned` (exit code 2). See [`docs/cli.md`](docs/cli.md).
+`--no-infer`, `--show-inferred-spec`, `--model`, `--fail-on-misaligned` (exit
+code 2). See [`docs/cli.md`](docs/cli.md).
 
 ---
 
 ## How it works
 
 ```
-GitHub PR ──► fetch intent + diff ──► budget the diff ──► Claude (structured output) ──► render
-              title/body/issue        rank & fit to        one call, verdict +          Markdown
-              + per-file patches       token budget         claims + unstated            comment / terminal
+GitHub PR ──► gather context ──┬─► infer spec (diff-blind) ──┐
+              title/body/issue │   expected behavior,        │
+              commits/labels   │   edge cases, criteria      ├─► Claude ──► render
+              + per-file patch └─► budget the diff ──────────┘   verdict +   Markdown
+                                   rank & fit to budget          claims      / terminal
 ```
 
 **Step by step:**
 
 1. **Fetch** — One call assembles everything: PR title, body, linked issue (parsed
-   from closing keywords like "fixes #42"), and every changed file with its per-file patch.
-2. **Filter** — Drop noise: lockfiles, `*.min.*`, `dist/`, `.snap`, binaries.
-3. **Rank** — Stable-sort by importance (`src > config > tests > docs > other`) so
+   from closing keywords like "fixes #42"), commits, labels, and every changed
+   file with its per-file patch.
+2. **Gather context** — Reshape that into a `ReviewContext`: filenames, status,
+   and add/delete counts, with the patches held back. This is the object the
+   inference stage sees.
+3. **Infer** — A separate, diff-blind Claude call reads only that context and
+   derives an implied spec — expected behavior, edge cases, acceptance
+   criteria — the PR never wrote down. It runs concurrently with budgeting, so
+   it costs more but doesn't add wall-clock time. `--no-infer` skips it.
+4. **Filter** — Drop noise: lockfiles, `*.min.*`, `dist/`, `.snap`, binaries.
+5. **Rank** — Stable-sort by importance (`src > config > tests > docs > other`) so
    least-important files get cut first.
-4. **Budget** — Greedily keep whole file patches while real token count (Claude's
+6. **Budget** — Greedily keep whole file patches while real token count (Claude's
    real `countTokens`, no heuristics) stays under `maxDiffTokens` (default 50k).
-5. **Prompt** — Build the system prompt + PR's intent + budgeted diff.
-6. **Review** — A single `messages.parse` call with structured output (Zod schema).
-   One call in, one typed `Review` out.
-7. **Render** — Turn the typed review into a Markdown comment (with GitHub
-   permalinks) or colored terminal output.
+7. **Prompt** — Build the system prompt + PR's intent + implied spec + budgeted diff.
+8. **Review** — A single `messages.parse` call with structured output (Zod schema),
+   grading the diff against both the stated claims and the inferred spec.
+9. **Render** — Turn the typed review into a Markdown comment (with GitHub
+   permalinks) or colored terminal output. Stated and inferred claims share
+   one table; a signal score footer says how much context the PR gave to
+   infer from.
 
 ### Key design decisions
 
@@ -178,14 +192,22 @@ GitHub PR ──► fetch intent + diff ──► budget the diff ──► Clau
   summary always gets the report; commenting is opt-in.
 - **Real token counting.** `countTokens` uses Claude's real tokenizer. No
   "chars ÷ 4" heuristics, no surprises at the budget boundary.
+- **Inference is diff-blind.** The stage that decides what a PR _should_ do never
+  sees the code — `ReviewContext` has no field that can hold a patch. A spec
+  written after reading the implementation would just describe the implementation.
+- **Signal is scored by code, confidence by the model.** How much context existed
+  is a fact (`scoreSignal`); how sure the model is of a derived expectation is a
+  judgment. Neither one reports the other's number.
 
 ---
 
 ## Cost
 
-A typical review is one Claude call — roughly **$0.05–0.35** on `claude-opus-4-8`
-depending on diff size, capped by `max-diff-tokens` (default 50k tokens).
-Using Sonnet instead of Opus cuts cost ~40%.
+A typical review is two Claude calls — spec inference plus the review itself —
+roughly **$0.10–0.70** on `claude-opus-4-8` depending on diff size, capped by
+`max-diff-tokens` (default 50k tokens). `--no-infer` (CLI) or `infer: false`
+(Action) skips the inference call and roughly halves that. Using Sonnet
+instead of Opus cuts cost ~40%.
 
 ---
 
