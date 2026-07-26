@@ -1,6 +1,6 @@
 import * as core from "@actions/core";
 import * as github from "@actions/github";
-import { GitHubClient, reviewPullRequest, reviewToMarkdown } from "@rubric/core";
+import { GitHubClient, gatherContext, reviewPullRequest, reviewToMarkdown } from "@rubric/core";
 
 /**
  * GitHub Action entry point.
@@ -33,20 +33,12 @@ async function run(): Promise<void> {
     core.info(`Reviewing ${owner}/${repo}#${number}…`);
     const data = await gh.getPullRequestData(owner, repo, number);
 
-    const review = await reviewPullRequest(
-        {
-            title: data.title,
-            body: data.body,
-            linkedIssue: data.linkedIssue,
-            files: data.files,
-        },
-        {
-            anthropicApiKey: apiKey,
-            model,
-            maxDiffTokens,
-            logger: (m) => core.info(m),
-        },
-    );
+    const review = await reviewPullRequest(gatherContext(data), data.files, {
+        anthropicApiKey: apiKey,
+        model,
+        maxDiffTokens,
+        logger: (m) => core.info(m),
+    });
 
     const markdown = reviewToMarkdown(review, {
         owner,

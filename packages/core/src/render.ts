@@ -1,5 +1,5 @@
 import { RUBRIC_COMMENT_MARKER } from "./types.js";
-import type { Claim, Review } from "./schema.js";
+import type { Claim, InferredClaim, Review } from "./schema.js";
 
 /** Repo/run context needed to build permalinks and the footer. */
 export interface RenderContext {
@@ -31,6 +31,15 @@ const RISK_EMOJI: Record<"low" | "medium" | "high", string> = {
     high: "🔴",
 };
 
+/** Stated and inferred claims render as one table; provenance is a column. */
+function allClaims(review: Review): Array<Claim | InferredClaim> {
+    return [...review.statedClaims, ...review.inferredClaims];
+}
+
+function isInferred(claim: Claim | InferredClaim): claim is InferredClaim {
+    return "confidence" in claim;
+}
+
 /** Escape characters that would break a Markdown table cell. */
 function cell(text: string): string {
     return text.replace(/\|/g, "\\|").replace(/\r?\n/g, " ").trim();
@@ -56,12 +65,25 @@ function evidenceLinks(claim: Claim, ctx: RenderContext): string {
         .join("<br>");
 }
 
-function claimsTable(claims: Claim[], ctx: RenderContext): string {
+function claimsTable(review: Review, ctx: RenderContext): string {
+    const claims = allClaims(review);
     if (claims.length === 0) return "_No checkable claims were identified._";
-    const header = "| | Claim | Evidence |\n|:--:|---|---|";
-    const rows = claims.map(
-        (c) => `| ${STATUS_EMOJI[c.status]} | ${cell(c.text)} | ${evidenceLinks(c, ctx)} |`,
-    );
+
+    // Omit the Source column entirely when nothing was inferred, so --no-infer
+    // output stays byte-identical to pre-inference Rubric.
+    const showSource = review.inferredClaims.length > 0;
+    const header = showSource
+        ? "| | Claim | Source | Evidence |\n|:--:|---|---|---|"
+        : "| | Claim | Evidence |\n|:--:|---|---|";
+
+    const rows = claims.map((c) => {
+        const cells = [STATUS_EMOJI[c.status], cell(c.text)];
+        if (showSource) {
+            cells.push(isInferred(c) ? `inferred · ${c.confidence.toUpperCase()}` : "stated");
+        }
+        cells.push(evidenceLinks(c, ctx));
+        return `| ${cells.join(" | ")} |`;
+    });
     return [header, ...rows].join("\n");
 }
 
@@ -73,6 +95,17 @@ function unstatedSection(changes: Review["unstatedChanges"]): string | null {
     return [`### ⚠️ Unstated changes`, ``, ...items].join("\n");
 }
 
+/** Footer line summarizing the code-computed signal score. */
+function signalLine(review: Review): string {
+    const weakest = [...review.signalScore.components]
+        .filter((c) => c.earned < c.max)
+        .sort((a, b) => a.earned - b.earned)
+        .slice(0, 2)
+        .map((c) => c.note);
+    const detail = weakest.length > 0 ? ` — ${weakest.join(", ")}` : "";
+    return `Signal ${review.signalScore.total}/100${detail}`;
+}
+
 /** Render a Review as the Markdown body of Rubric's PR comment. */
 export function reviewToMarkdown(review: Review, ctx: RenderContext): string {
     const parts: string[] = [RUBRIC_COMMENT_MARKER];
@@ -80,7 +113,7 @@ export function reviewToMarkdown(review: Review, ctx: RenderContext): string {
     parts.push(`## ${VERDICT_BADGE[review.verdict]}`);
     parts.push(review.summary);
 
-    parts.push(`### Claims\n\n${claimsTable(review.claims, ctx)}`);
+    parts.push(`### Claims\n\n${claimsTable(review, ctx)}`);
 
     const unstated = unstatedSection(review.unstatedChanges);
     if (unstated) parts.push(unstated);
@@ -92,7 +125,10 @@ export function reviewToMarkdown(review: Review, ctx: RenderContext): string {
     }
 
     const tokenNote = ctx.inputTokens !== undefined ? ` · ${ctx.inputTokens} input tokens` : "";
-    parts.push(`---\n<sub>Reviewed by Rubric · \`${ctx.model}\`${tokenNote}</sub>`);
+    // The signal score calibrates trust in inferred content; with nothing inferred
+    // there is nothing to calibrate, so it stays hidden.
+    const signalNote = review.inference.ran ? ` · ${signalLine(review)}` : "";
+    parts.push(`---\n<sub>Reviewed by Rubric · \`${ctx.model}\`${signalNote}${tokenNote}</sub>`);
 
     return parts.join("\n\n") + "\n";
 }

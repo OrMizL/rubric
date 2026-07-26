@@ -50513,12 +50513,37 @@ var UnstatedChangeSchema = external_exports.object({
   description: external_exports.string(),
   risk: external_exports.enum(["low", "medium", "high"])
 });
-var ReviewSchema = external_exports.object({
+var InferredClaimSchema = ClaimSchema.extend({
+  confidence: external_exports.enum(["high", "medium", "low"]).describe("How directly the PR context supports this expectation"),
+  kind: external_exports.enum(["behavior", "edge_case", "acceptance"])
+});
+var SignalComponentSchema = external_exports.object({
+  key: external_exports.enum(["description", "linkedIssue", "commits", "tests", "focus"]),
+  label: external_exports.string(),
+  earned: external_exports.number(),
+  max: external_exports.number(),
+  note: external_exports.string()
+});
+var SignalScoreSchema = external_exports.object({
+  total: external_exports.number(),
+  band: external_exports.enum(["high", "medium", "low"]),
+  components: external_exports.array(SignalComponentSchema)
+});
+var InferenceStatusSchema = external_exports.object({
+  ran: external_exports.boolean(),
+  reason: external_exports.string().optional()
+});
+var ReviewOutputSchema = external_exports.object({
   verdict: external_exports.enum(["aligned", "partially_aligned", "misaligned"]),
   summary: external_exports.string().describe("2-3 sentence overall assessment"),
-  claims: external_exports.array(ClaimSchema),
-  unstatedChanges: external_exports.array(UnstatedChangeSchema),
-  truncated: external_exports.boolean().describe("true if the diff was truncated to fit budget")
+  statedClaims: external_exports.array(ClaimSchema).describe("Claims the PR description makes explicitly"),
+  inferredClaims: external_exports.array(InferredClaimSchema).describe("Expected behaviors derived from context, graded against the diff"),
+  unstatedChanges: external_exports.array(UnstatedChangeSchema)
+});
+var ReviewSchema = ReviewOutputSchema.extend({
+  truncated: external_exports.boolean().describe("true if the diff was truncated to fit budget"),
+  signalScore: SignalScoreSchema,
+  inference: InferenceStatusSchema
 });
 var RUBRIC_COMMENT_MARKER = "<!-- rubric-review -->";
 var LINKED_ISSUE_RE = /(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/i;
@@ -50643,9 +50668,13 @@ function filterFiles(files) {
     return true;
   });
 }
+function isTestFile(filename) {
+  const name = basename3(filename);
+  return /(^|\/)(__tests__|tests?|spec|__mocks__)\//.test(filename) || /\.(test|spec)\.[cm]?[jt]sx?$/.test(name);
+}
 function category(filename) {
   const name = basename3(filename);
-  if (/(^|\/)(__tests__|tests?|spec|__mocks__)\//.test(filename) || /\.(test|spec)\.[cm]?[jt]sx?$/.test(name)) {
+  if (isTestFile(filename)) {
     return 2;
   }
   if (/\.(ya?ml|toml|ini|cfg)$/i.test(name) || /\.config\.[cm]?[jt]sx?$/.test(name) || /^(package\.json|tsconfig(\.\w+)?\.json|\.\w+rc(\.\w+)?)$/.test(name) || name.endsWith(".json")) {
@@ -50772,6 +50801,12 @@ var RISK_EMOJI = {
   medium: "\u{1F7E0}",
   high: "\u{1F534}"
 };
+function allClaims(review) {
+  return [...review.statedClaims, ...review.inferredClaims];
+}
+function isInferred(claim) {
+  return "confidence" in claim;
+}
 function cell(text) {
   return text.replace(/\|/g, "\\|").replace(/\r?\n/g, " ").trim();
 }
@@ -50790,12 +50825,19 @@ function evidenceLinks(claim, ctx) {
     return `[${e.file}${anchor}](${url2})`;
   }).join("<br>");
 }
-function claimsTable(claims, ctx) {
+function claimsTable(review, ctx) {
+  const claims = allClaims(review);
   if (claims.length === 0) return "_No checkable claims were identified._";
-  const header = "| | Claim | Evidence |\n|:--:|---|---|";
-  const rows = claims.map(
-    (c) => `| ${STATUS_EMOJI[c.status]} | ${cell(c.text)} | ${evidenceLinks(c, ctx)} |`
-  );
+  const showSource = review.inferredClaims.length > 0;
+  const header = showSource ? "| | Claim | Source | Evidence |\n|:--:|---|---|---|" : "| | Claim | Evidence |\n|:--:|---|---|";
+  const rows = claims.map((c) => {
+    const cells = [STATUS_EMOJI[c.status], cell(c.text)];
+    if (showSource) {
+      cells.push(isInferred(c) ? `inferred \xB7 ${c.confidence.toUpperCase()}` : "stated");
+    }
+    cells.push(evidenceLinks(c, ctx));
+    return `| ${cells.join(" | ")} |`;
+  });
   return [header, ...rows].join("\n");
 }
 function unstatedSection(changes) {
@@ -50805,13 +50847,18 @@ function unstatedSection(changes) {
   );
   return [`### \u26A0\uFE0F Unstated changes`, ``, ...items].join("\n");
 }
+function signalLine(review) {
+  const weakest = [...review.signalScore.components].filter((c) => c.earned < c.max).sort((a, b) => a.earned - b.earned).slice(0, 2).map((c) => c.note);
+  const detail = weakest.length > 0 ? ` \u2014 ${weakest.join(", ")}` : "";
+  return `Signal ${review.signalScore.total}/100${detail}`;
+}
 function reviewToMarkdown(review, ctx) {
   const parts = [RUBRIC_COMMENT_MARKER];
   parts.push(`## ${VERDICT_BADGE[review.verdict]}`);
   parts.push(review.summary);
   parts.push(`### Claims
 
-${claimsTable(review.claims, ctx)}`);
+${claimsTable(review, ctx)}`);
   const unstated = unstatedSection(review.unstatedChanges);
   if (unstated) parts.push(unstated);
   if (review.truncated) {
@@ -50820,19 +50867,116 @@ ${claimsTable(review.claims, ctx)}`);
     );
   }
   const tokenNote = ctx.inputTokens !== void 0 ? ` \xB7 ${ctx.inputTokens} input tokens` : "";
+  const signalNote = review.inference.ran ? ` \xB7 ${signalLine(review)}` : "";
   parts.push(`---
-<sub>Reviewed by Rubric \xB7 \`${ctx.model}\`${tokenNote}</sub>`);
+<sub>Reviewed by Rubric \xB7 \`${ctx.model}\`${signalNote}${tokenNote}</sub>`);
   return parts.join("\n\n") + "\n";
+}
+var SIGNAL_WEIGHTS = {
+  description: 25,
+  linkedIssue: 20,
+  commits: 15,
+  tests: 20,
+  focus: 20
+};
+var LOW_SIGNAL_THRESHOLD = 60;
+var HIGH_SIGNAL_THRESHOLD = 80;
+var MIN_COMMIT_SUBJECT = 15;
+var GENERIC_COMMIT_RE = /^(wip|fix|update|changes?|stuff|misc)\b/i;
+var LIST_ITEM_RE = /^\s*([-*+]|\d+\.)\s+/m;
+var CHARS_PER_POINT = 40;
+var MAX_LENGTH_POINTS = 15;
+function scoreDescription(body) {
+  const base = { key: "description", label: "Description detail", max: 25 };
+  const text = body.trim();
+  if (text === "") return { ...base, earned: 0, note: "no description" };
+  const length = Math.min(MAX_LENGTH_POINTS, Math.floor(text.length / CHARS_PER_POINT));
+  const paragraphs = text.split(/\n\s*\n/).filter((p) => p.trim() !== "").length;
+  const structure = (paragraphs >= 2 ? 5 : 0) + (LIST_ITEM_RE.test(text) ? 5 : 0);
+  return {
+    ...base,
+    earned: length + structure,
+    note: `${text.length} chars, ${paragraphs} paragraph(s)`
+  };
+}
+function scoreLinkedIssue(ctx) {
+  const linked = ctx.linkedIssue !== null;
+  return {
+    key: "linkedIssue",
+    label: "Linked issue",
+    earned: linked ? SIGNAL_WEIGHTS.linkedIssue : 0,
+    max: SIGNAL_WEIGHTS.linkedIssue,
+    note: linked ? `#${ctx.linkedIssue.number}` : "none linked"
+  };
+}
+function isSubstantive(commit) {
+  const subject = (commit.message.split("\n", 1)[0] ?? "").trim();
+  if (subject.startsWith("Merge ")) return false;
+  if (subject.length < MIN_COMMIT_SUBJECT) return false;
+  return !GENERIC_COMMIT_RE.test(subject);
+}
+function scoreCommits(commits) {
+  const substantive = commits.filter(isSubstantive).length;
+  return {
+    key: "commits",
+    label: "Commit quality",
+    earned: Math.min(SIGNAL_WEIGHTS.commits, substantive * 5),
+    max: SIGNAL_WEIGHTS.commits,
+    note: `${substantive} of ${commits.length} commit(s) substantive`
+  };
+}
+function scoreTests(files) {
+  const touched = files.some((f) => isTestFile(f.filename));
+  return {
+    key: "tests",
+    label: "Tests touched",
+    earned: touched ? SIGNAL_WEIGHTS.tests : 0,
+    max: SIGNAL_WEIGHTS.tests,
+    note: touched ? "test files changed" : "no test files changed"
+  };
+}
+function topLevelDir(filename) {
+  const i = filename.indexOf("/");
+  return i === -1 ? "." : filename.slice(0, i);
+}
+var FOCUS_POINTS = [20, 20, 15, 10, 5];
+function scoreFocus(files) {
+  const dirs = new Set(files.map((f) => topLevelDir(f.filename)));
+  return {
+    key: "focus",
+    label: "Scope focus",
+    earned: FOCUS_POINTS[dirs.size] ?? 0,
+    max: SIGNAL_WEIGHTS.focus,
+    note: `${dirs.size} top-level director${dirs.size === 1 ? "y" : "ies"} touched`
+  };
+}
+function bandFor(total) {
+  if (total >= HIGH_SIGNAL_THRESHOLD) return "high";
+  if (total >= LOW_SIGNAL_THRESHOLD) return "medium";
+  return "low";
+}
+function scoreSignal(ctx) {
+  const components = [
+    scoreDescription(ctx.body),
+    scoreLinkedIssue(ctx),
+    scoreCommits(ctx.commits),
+    scoreTests(ctx.fileSummary),
+    scoreFocus(ctx.fileSummary)
+  ];
+  const total = components.reduce((sum, c) => sum + c.earned, 0);
+  return { total, band: bandFor(total), components };
 }
 var DEFAULT_MODEL = "claude-opus-4-8";
 var DEFAULT_MAX_DIFF_TOKENS = 5e4;
 var DEFAULT_MAX_OUTPUT_TOKENS = 16e3;
-async function reviewPullRequest(input, opts) {
+async function reviewPullRequest(context3, files, opts) {
   const model = opts.model ?? DEFAULT_MODEL;
   const maxDiffTokens = opts.maxDiffTokens ?? DEFAULT_MAX_DIFF_TOKENS;
   const log = opts.logger ?? ((m) => console.error(`[rubric] ${m}`));
   const client = new Anthropic({ apiKey: opts.anthropicApiKey });
   const system = buildSystemPrompt();
+  const signalScore = scoreSignal(context3);
+  log(`signal score: ${signalScore.total}/100 (${signalScore.band})`);
   const countTokens = async (text) => {
     const { input_tokens: input_tokens2 } = await client.messages.countTokens({
       model,
@@ -50840,7 +50984,7 @@ async function reviewPullRequest(input, opts) {
     });
     return input_tokens2;
   };
-  const ranked = rankFiles(filterFiles(input.files));
+  const ranked = rankFiles(filterFiles(files));
   const budget = await truncateToBudget(ranked, maxDiffTokens, countTokens);
   if (budget.truncated) {
     log(
@@ -50848,9 +50992,9 @@ async function reviewPullRequest(input, opts) {
     );
   }
   const user = buildUserPrompt({
-    title: input.title,
-    body: input.body,
-    linkedIssue: input.linkedIssue,
+    title: context3.title,
+    body: context3.body,
+    linkedIssue: context3.linkedIssue,
     diffText: budget.diffText,
     truncated: budget.truncated
   });
@@ -50866,12 +51010,37 @@ async function reviewPullRequest(input, opts) {
     thinking: { type: "adaptive" },
     system,
     messages: [{ role: "user", content: user }],
-    output_config: { format: zodOutputFormat(ReviewSchema) }
+    output_config: { format: zodOutputFormat(ReviewOutputSchema) }
   });
   if (!response.parsed_output) {
     throw new Error(`Review parse failed (stop_reason: ${response.stop_reason})`);
   }
-  return { ...response.parsed_output, truncated: budget.truncated };
+  const inference = { ran: false, reason: "not enabled" };
+  return {
+    ...response.parsed_output,
+    inferredClaims: [],
+    truncated: budget.truncated,
+    signalScore,
+    inference
+  };
+}
+function summarizeFiles(files) {
+  return files.map(({ filename, status, additions, deletions }) => ({
+    filename,
+    status,
+    additions,
+    deletions
+  }));
+}
+function gatherContext(pr) {
+  return {
+    title: pr.title,
+    body: pr.body,
+    linkedIssue: pr.linkedIssue,
+    labels: pr.labels,
+    commits: pr.commits,
+    fileSummary: summarizeFiles(pr.files)
+  };
 }
 
 // src/main.ts
@@ -50895,20 +51064,12 @@ async function run() {
   const gh = new GitHubClient({ token });
   info(`Reviewing ${owner}/${repo}#${number4}\u2026`);
   const data = await gh.getPullRequestData(owner, repo, number4);
-  const review = await reviewPullRequest(
-    {
-      title: data.title,
-      body: data.body,
-      linkedIssue: data.linkedIssue,
-      files: data.files
-    },
-    {
-      anthropicApiKey: apiKey,
-      model,
-      maxDiffTokens,
-      logger: (m) => info(m)
-    }
-  );
+  const review = await reviewPullRequest(gatherContext(data), data.files, {
+    anthropicApiKey: apiKey,
+    model,
+    maxDiffTokens,
+    logger: (m) => info(m)
+  });
   const markdown = reviewToMarkdown(review, {
     owner,
     repo,

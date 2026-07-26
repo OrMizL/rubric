@@ -1,7 +1,7 @@
 {
   "verdict": "misaligned",
   "summary": "The PR claims to be a documentation-only change adding an Installation section to the README, but the diff contains no README changes at all. Instead, it modifies the core slugify logic in index.js and adds a test case, directly contradicting the stated intent.",
-  "claims": [
+  "statedClaims": [
     {
       "id": "c1",
       "text": "Adds an Installation section to the README covering npm install and yarn add commands",
@@ -29,5 +29,8 @@
       "risk": "medium"
     }
   ],
+  "inferredClaims": [],
+  "signalScore": { "total": 0, "band": "low", "components": [] },
+  "inference": { "ran": false, "reason": "fixture predates inference" },
   "truncated": false
 }

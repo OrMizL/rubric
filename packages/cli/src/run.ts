@@ -1,5 +1,6 @@
 import {
     GitHubClient,
+    gatherContext,
     reviewPullRequest,
     reviewToMarkdown,
     DEFAULT_MODEL,
@@ -142,15 +143,11 @@ export async function run(argv: string[]): Promise<number> {
         );
         const pr = await gh.getPullRequestData(target.owner, target.repo, target.number);
         headSha = pr.headSha;
-        review = await reviewPullRequest(
-            {
-                title: pr.title,
-                body: pr.body,
-                linkedIssue: pr.linkedIssue,
-                files: pr.files,
-            },
-            { anthropicApiKey: apiKey, model, maxDiffTokens: args.maxDiffTokens },
-        );
+        review = await reviewPullRequest(gatherContext(pr), pr.files, {
+            anthropicApiKey: apiKey,
+            model,
+            maxDiffTokens: args.maxDiffTokens,
+        });
     } catch (err) {
         process.stderr.write(`Review failed: ${(err as Error).message}\n`);
         return 1;

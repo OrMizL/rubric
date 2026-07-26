@@ -1,7 +1,7 @@
 {
   "verdict": "aligned",
   "summary": "The PR moves the contraction/possession removal to operate on the raw input string (matching apostrophes) before the main slug pattern replacement, exactly as described. This correctly avoids the reported bug where slugified strings ending in `-s`/`-t` were wrongly modified, and a regression test is added.",
-  "claims": [
+  "statedClaims": [
     {
       "id": "c1",
       "text": "Perform the contraction/possession replacement before the main pattern replacement",
@@ -38,5 +38,8 @@
     }
   ],
   "unstatedChanges": [],
+  "inferredClaims": [],
+  "signalScore": { "total": 0, "band": "low", "components": [] },
+  "inference": { "ran": false, "reason": "fixture predates inference" },
   "truncated": false
 }

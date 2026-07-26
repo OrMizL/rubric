@@ -7,9 +7,16 @@ export {
     ClaimSchema,
     UnstatedChangeSchema,
     ReviewSchema,
+    InferredClaimSchema,
+    ReviewOutputSchema,
+    SignalScoreSchema,
+    InferenceStatusSchema,
     type Claim,
     type UnstatedChange,
     type Review,
+    type InferredClaim,
+    type ReviewOutput,
+    type InferenceStatus,
 } from "./schema.js";
 
 export {
@@ -40,5 +47,18 @@ export {
     DEFAULT_MAX_DIFF_TOKENS,
     DEFAULT_MAX_OUTPUT_TOKENS,
     type EngineOptions,
-    type ReviewInput,
 } from "./engine.js";
+
+export { gatherContext, summarizeFiles, type FileSummary, type ReviewContext } from "./context.js";
+
+export {
+    scoreSignal,
+    SIGNAL_WEIGHTS,
+    LOW_SIGNAL_THRESHOLD,
+    HIGH_SIGNAL_THRESHOLD,
+    type SignalKey,
+    type SignalComponent,
+    type SignalScore,
+} from "./confidence.js";
+
+export { type Commit } from "./types.js";

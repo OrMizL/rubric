@@ -71,6 +71,7 @@ function Evidence({ claim }: { claim: Claim }) {
 
 export function ReviewCard({ review }: { review: Review }) {
     const verdict = VERDICT_META[review.verdict];
+    const claims = [...review.statedClaims, ...review.inferredClaims];
 
     return (
         <article className="review">
@@ -88,10 +89,10 @@ export function ReviewCard({ review }: { review: Review }) {
             <section className="review__block">
                 <div className="review__block-head">
                     <h4 className="review__block-title">Claims</h4>
-                    <span className="review__count">{review.claims.length}</span>
+                    <span className="review__count">{claims.length}</span>
                 </div>
 
-                {review.claims.length === 0 ? (
+                {claims.length === 0 ? (
                     <p className="review__empty">No checkable claims were identified.</p>
                 ) : (
                     <>
@@ -105,7 +106,7 @@ export function ReviewCard({ review }: { review: Review }) {
                                 </tr>
                             </thead>
                             <tbody>
-                                {review.claims.map((claim) => (
+                                {claims.map((claim) => (
                                     <tr key={claim.id}>
                                         <td className="claims__status">
                                             <StatusPill status={claim.status} />
@@ -126,7 +127,7 @@ export function ReviewCard({ review }: { review: Review }) {
 
                         {/* Mobile: stacked cards. Hidden above ~640px via CSS. */}
                         <ul className="claim-cards">
-                            {review.claims.map((claim) => (
+                            {claims.map((claim) => (
                                 <li className="claim-card" key={claim.id}>
                                     <StatusPill status={claim.status} />
                                     <p className="claims__text">{claim.text}</p>

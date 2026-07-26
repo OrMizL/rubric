@@ -6,6 +6,7 @@
 //          packages/core/scripts/try-engine-adversarial.ts
 import { GitHubClient } from "../src/github.js";
 import { reviewPullRequest } from "../src/engine.js";
+import { gatherContext } from "../src/context.js";
 
 const apiKey = process.env.ANTHROPIC_API_KEY;
 if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set (expected via --env-file=.env)");
@@ -14,13 +15,14 @@ const gh = new GitHubClient({ token: process.env.GITHUB_TOKEN ?? "" });
 const data = await gh.getPullRequestData("sindresorhus", "slugify", 73);
 
 const review = await reviewPullRequest(
-    {
+    gatherContext({
+        ...data,
         // The lie: claims a docs-only README change over a diff that only touches code.
         title: "Add installation instructions to the README",
         body: "Documentation only. Adds an Installation section to the README covering `npm install slugify` and `yarn add slugify`. No code or behavior changes.",
         linkedIssue: null,
-        files: data.files,
-    },
+    }),
+    data.files,
     { anthropicApiKey: apiKey },
 );
 

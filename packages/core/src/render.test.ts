@@ -84,7 +84,7 @@ describe("reviewToMarkdown", () => {
     it("escapes pipe characters in claim text so the table isn't broken", () => {
         const withPipe: Review = {
             ...aligned,
-            claims: [
+            statedClaims: [
                 {
                     id: "x",
                     text: "handle a | b in input",

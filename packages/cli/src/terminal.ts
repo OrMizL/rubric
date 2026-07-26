@@ -71,11 +71,12 @@ export function renderTerminal(review: Review, opts: TerminalOptions): string {
     lines.push(review.summary);
     lines.push("");
 
+    const claims = [...review.statedClaims, ...review.inferredClaims];
     lines.push(c.bold("Claims:"));
-    if (review.claims.length === 0) {
+    if (claims.length === 0) {
         lines.push(c.dim("  (no checkable claims identified)"));
     }
-    for (const claim of review.claims) {
+    for (const claim of claims) {
         const s = STATUS[claim.status];
         const tag = c[s.tint](`${s.symbol} ${s.label.padEnd(12)}`);
         lines.push(`  ${tag} ${claim.text}`);

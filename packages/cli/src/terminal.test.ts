@@ -5,7 +5,7 @@ import type { Review } from "@rubric/core";
 const aligned: Review = {
     verdict: "aligned",
     summary: "Everything the PR claims is implemented.",
-    claims: [
+    statedClaims: [
         {
             id: "c1",
             text: "Moves the replacement before the slug pattern",
@@ -14,14 +14,17 @@ const aligned: Review = {
             explanation: "",
         },
     ],
+    inferredClaims: [],
     unstatedChanges: [],
     truncated: false,
+    signalScore: { total: 0, band: "low", components: [] },
+    inference: { ran: false },
 };
 
 const misaligned: Review = {
     verdict: "misaligned",
     summary: "Claims a docs-only change but edits code.",
-    claims: [
+    statedClaims: [
         {
             id: "c1",
             text: "Adds an Installation section to the README",
@@ -30,6 +33,7 @@ const misaligned: Review = {
             explanation: "",
         },
     ],
+    inferredClaims: [],
     unstatedChanges: [
         {
             file: "index.js",
@@ -38,6 +42,8 @@ const misaligned: Review = {
         },
     ],
     truncated: false,
+    signalScore: { total: 0, band: "low", components: [] },
+    inference: { ran: false },
 };
 
 const opts = { color: false };
