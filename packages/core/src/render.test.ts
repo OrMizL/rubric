@@ -98,3 +98,89 @@ describe("reviewToMarkdown", () => {
         expect(md).toContain("a \\| b");
     });
 });
+
+describe("inferred claims rendering", () => {
+    const ctx = { owner: "o", repo: "r", headSha: "abc123", model: "claude-opus-4-8" };
+
+    const withInferred = {
+        verdict: "partially_aligned" as const,
+        summary: "Mostly there.",
+        statedClaims: [
+            {
+                id: "s1",
+                text: "Disables submit on click",
+                status: "implemented" as const,
+                evidence: [{ file: "src/submit.tsx", lines: "24" }],
+                explanation: "Done.",
+            },
+        ],
+        inferredClaims: [
+            {
+                id: "i1",
+                text: "In-flight state is visible",
+                status: "missing" as const,
+                evidence: [],
+                explanation: "No spinner found.",
+                confidence: "high" as const,
+                kind: "behavior" as const,
+            },
+        ],
+        unstatedChanges: [],
+        truncated: false,
+        signalScore: {
+            total: 48,
+            band: "low" as const,
+            components: [
+                {
+                    key: "tests" as const,
+                    label: "Tests touched",
+                    earned: 0,
+                    max: 20,
+                    note: "no test files changed",
+                },
+            ],
+        },
+        inference: { ran: true },
+    };
+
+    it("renders one table with a Source column", () => {
+        const md = reviewToMarkdown(withInferred, ctx);
+        expect(md).toContain("| | Claim | Source | Evidence |");
+        expect(md).toContain("| stated |");
+        expect(md).toContain("inferred · HIGH");
+    });
+
+    it("puts stated claims before inferred ones", () => {
+        const md = reviewToMarkdown(withInferred, ctx);
+        expect(md.indexOf("Disables submit on click")).toBeLessThan(
+            md.indexOf("In-flight state is visible"),
+        );
+    });
+
+    it("shows the signal score in the footer when inference ran", () => {
+        expect(reviewToMarkdown(withInferred, ctx)).toContain("Signal 48/100");
+    });
+
+    it("hides the signal score when inference did not run", () => {
+        const off = { ...withInferred, inferredClaims: [], inference: { ran: false } };
+        expect(reviewToMarkdown(off, ctx)).not.toContain("Signal 48/100");
+    });
+
+    it("promotes a low-signal disclaimer above the claims", () => {
+        const md = reviewToMarkdown(withInferred, ctx);
+        expect(md).toContain("Low signal (48/100)");
+        expect(md.indexOf("Low signal")).toBeLessThan(md.indexOf("### Claims"));
+    });
+
+    it("omits the disclaimer once signal clears the threshold", () => {
+        const strong = {
+            ...withInferred,
+            signalScore: { ...withInferred.signalScore, total: 85, band: "high" as const },
+        };
+        expect(reviewToMarkdown(strong, ctx)).not.toContain("Low signal");
+    });
+
+    it("keeps the marker first", () => {
+        expect(reviewToMarkdown(withInferred, ctx).startsWith("<!-- rubric-review -->")).toBe(true);
+    });
+});

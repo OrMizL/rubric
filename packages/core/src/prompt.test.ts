@@ -62,3 +62,35 @@ describe("buildUserPrompt", () => {
         expect(p).toMatch(/no description/i);
     });
 });
+
+describe("buildUserPrompt with an implied spec", () => {
+    const specBase: PromptInput = {
+        title: "fix: prevent double submit",
+        body: "Users could submit twice.",
+        linkedIssue: null,
+        diffText: "### src/submit.tsx (modified, +1/-0)\n@@ -1 +1 @@\n+x",
+        truncated: false,
+    };
+
+    it("includes each spec item with its kind and confidence", () => {
+        const prompt = buildUserPrompt({
+            ...specBase,
+            impliedSpec: {
+                items: [
+                    { text: "Submit disables on click", kind: "behavior", confidence: "high" },
+                    { text: "Repeat submits are ignored", kind: "edge_case", confidence: "medium" },
+                ],
+            },
+        });
+        expect(prompt).toContain("Implied specification");
+        expect(prompt).toContain("Submit disables on click");
+        expect(prompt).toContain("behavior");
+        expect(prompt).toContain("high");
+        expect(prompt).toContain("Repeat submits are ignored");
+    });
+
+    it("omits the section entirely when inference did not run", () => {
+        const prompt = buildUserPrompt({ ...specBase, impliedSpec: null });
+        expect(prompt).not.toContain("Implied specification");
+    });
+});

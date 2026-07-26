@@ -62,3 +62,15 @@ export {
 } from "./confidence.js";
 
 export { type Commit } from "./types.js";
+
+export {
+    inferSpec,
+    buildInferSystemPrompt,
+    buildInferUserPrompt,
+    SpecItemSchema,
+    ImpliedSpecSchema,
+    DEFAULT_INFER_MAX_OUTPUT_TOKENS,
+    type SpecItem,
+    type ImpliedSpec,
+    type InferOptions,
+} from "./infer.js";

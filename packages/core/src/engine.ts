@@ -5,6 +5,7 @@ import { scoreSignal } from "./confidence.js";
 import type { ReviewContext } from "./context.js";
 import { buildSystemPrompt, buildUserPrompt } from "./prompt.js";
 import { filterFiles, rankFiles, truncateToBudget } from "./budget.js";
+import { inferSpec, type ImpliedSpec } from "./infer.js";
 import type { ChangedFile } from "./types.js";
 
 export const DEFAULT_MODEL = "claude-opus-4-8";
@@ -21,6 +22,8 @@ export interface EngineOptions {
     maxOutputTokens?: number;
     /** Log sink; defaults to stderr. */
     logger?: (message: string) => void;
+    /** Run the diff-blind inference stage before the review. Default: true. */
+    infer?: boolean;
 }
 
 /**
@@ -53,12 +56,29 @@ export async function reviewPullRequest(
     };
 
     const ranked = rankFiles(filterFiles(files));
-    const budget = await truncateToBudget(ranked, maxDiffTokens, countTokens);
+    const shouldInfer = opts.infer ?? true;
+
+    // Inference does not need the budgeted diff, and budgeting is mostly waiting on
+    // countTokens round-trips — so the two overlap instead of running back to back.
+    let inferError: string | undefined;
+    const [spec, budget] = await Promise.all([
+        shouldInfer
+            ? inferSpec(context, { client, model }).catch((err: unknown) => {
+                  // A failed inference must not sink an otherwise valid review.
+                  inferError = err instanceof Error ? err.message : String(err);
+                  log(`spec inference failed, continuing with stated claims only: ${inferError}`);
+                  return null;
+              })
+            : Promise.resolve<ImpliedSpec | null>(null),
+        truncateToBudget(ranked, maxDiffTokens, countTokens),
+    ]);
+
     if (budget.truncated) {
         log(
             `diff truncated: kept ${budget.files.length} file(s), omitted ${budget.omitted.length}`,
         );
     }
+    if (spec) log(`inferred ${spec.items.length} spec item(s)`);
 
     const user = buildUserPrompt({
         title: context.title,
@@ -66,6 +86,7 @@ export async function reviewPullRequest(
         linkedIssue: context.linkedIssue,
         diffText: budget.diffText,
         truncated: budget.truncated,
+        impliedSpec: spec,
     });
 
     const { input_tokens } = await client.messages.countTokens({
@@ -88,11 +109,17 @@ export async function reviewPullRequest(
         throw new Error(`Review parse failed (stop_reason: ${response.stop_reason})`);
     }
 
-    // Inference lands in Task 6; until then the stage is simply off.
-    const inference: InferenceStatus = { ran: false, reason: "not enabled" };
+    const inference: InferenceStatus = !shouldInfer
+        ? { ran: false, reason: "disabled" }
+        : spec === null
+          ? { ran: false, reason: inferError ?? "inference failed" }
+          : { ran: true };
+
     return {
         ...response.parsed_output,
-        inferredClaims: [],
+        // Provenance is a fact the code owns: no spec means nothing was inferred,
+        // whatever the model chose to put in that array.
+        inferredClaims: spec === null ? [] : response.parsed_output.inferredClaims,
         truncated: budget.truncated,
         signalScore,
         inference,

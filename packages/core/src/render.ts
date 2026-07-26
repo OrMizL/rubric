@@ -1,5 +1,6 @@
 import { RUBRIC_COMMENT_MARKER } from "./types.js";
 import type { Claim, InferredClaim, Review } from "./schema.js";
+import { LOW_SIGNAL_THRESHOLD } from "./confidence.js";
 
 /** Repo/run context needed to build permalinks and the footer. */
 export interface RenderContext {
@@ -106,12 +107,25 @@ function signalLine(review: Review): string {
     return `Signal ${review.signalScore.total}/100${detail}`;
 }
 
+/** Warn when the inference had thin context to work from. */
+function lowSignalNotice(review: Review): string | null {
+    if (!review.inference.ran) return null;
+    if (review.signalScore.total >= LOW_SIGNAL_THRESHOLD) return null;
+    return (
+        `> ⚠️ Low signal (${review.signalScore.total}/100) — expected behavior was inferred ` +
+        `from limited PR context. Consider adding a description or linking an issue.`
+    );
+}
+
 /** Render a Review as the Markdown body of Rubric's PR comment. */
 export function reviewToMarkdown(review: Review, ctx: RenderContext): string {
     const parts: string[] = [RUBRIC_COMMENT_MARKER];
 
     parts.push(`## ${VERDICT_BADGE[review.verdict]}`);
     parts.push(review.summary);
+
+    const lowSignal = lowSignalNotice(review);
+    if (lowSignal) parts.push(lowSignal);
 
     parts.push(`### Claims\n\n${claimsTable(review, ctx)}`);
 

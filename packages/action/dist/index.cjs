@@ -50749,6 +50749,8 @@ Then assign an overall verdict:
    - partially_aligned: mostly matches, but with gaps (partial or missing claims) or notable unstated changes.
    - misaligned: the implementation contradicts the intent, omits its core claims, or contains high-risk unstated changes.
 
+When an implied specification is provided, it was produced by an earlier stage that saw the PR's intent and the names of changed files but never the diff. Grade each of its items against the diff exactly as you grade stated claims, and return them in \`inferredClaims\`, preserving each item's \`kind\` and \`confidence\` verbatim. Do not invent additional inferred items, and do not move a stated claim into \`inferredClaims\`. When no implied specification is provided, return an empty \`inferredClaims\` array.
+
 Be concrete and evidence-based: cite real files and line ranges drawn from the diff, never invented ones. When the diff was truncated to fit a token budget, judge only what you can see and note that limit. Prefer precision over charity \u2014 a plausible-sounding description the diff does not back up is exactly what you exist to catch.`;
 function buildSystemPrompt() {
   return SYSTEM_PROMPT;
@@ -50780,97 +50782,22 @@ function buildUserPrompt(input) {
   }
   diff.push(`<diff>`, input.diffText, `</diff>`);
   sections.push(diff.join("\n"));
+  if (input.impliedSpec && input.impliedSpec.items.length > 0) {
+    const items = input.impliedSpec.items.map(
+      (i) => `- [${i.kind}, ${i.confidence}] ${i.text}`
+    );
+    sections.push(
+      [
+        `# Implied specification`,
+        `Derived from the PR's intent without sight of the diff. Grade each item below.`,
+        ...items
+      ].join("\n")
+    );
+  }
   sections.push(
     `Produce your structured review of whether this implementation matches its stated intent.`
   );
   return sections.join("\n\n");
-}
-var VERDICT_BADGE = {
-  aligned: "\u2705 Aligned",
-  partially_aligned: "\u26A0\uFE0F Partially aligned",
-  misaligned: "\u274C Misaligned"
-};
-var STATUS_EMOJI = {
-  implemented: "\u2705",
-  partial: "\u{1F7E1}",
-  missing: "\u2B55",
-  contradicted: "\u274C"
-};
-var RISK_EMOJI = {
-  low: "\u26AA",
-  medium: "\u{1F7E0}",
-  high: "\u{1F534}"
-};
-function allClaims(review) {
-  return [...review.statedClaims, ...review.inferredClaims];
-}
-function isInferred(claim) {
-  return "confidence" in claim;
-}
-function cell(text) {
-  return text.replace(/\|/g, "\\|").replace(/\r?\n/g, " ").trim();
-}
-function linesToAnchor(lines) {
-  const range = /^\s*(\d+)\s*-\s*(\d+)\s*$/.exec(lines);
-  if (range) return `#L${range[1]}-L${range[2]}`;
-  const single = /^\s*(\d+)\s*$/.exec(lines);
-  if (single) return `#L${single[1]}`;
-  return "";
-}
-function evidenceLinks(claim, ctx) {
-  if (claim.evidence.length === 0) return "\u2014";
-  return claim.evidence.map((e) => {
-    const anchor = linesToAnchor(e.lines);
-    const url2 = `https://github.com/${ctx.owner}/${ctx.repo}/blob/${ctx.headSha}/${e.file}${anchor}`;
-    return `[${e.file}${anchor}](${url2})`;
-  }).join("<br>");
-}
-function claimsTable(review, ctx) {
-  const claims = allClaims(review);
-  if (claims.length === 0) return "_No checkable claims were identified._";
-  const showSource = review.inferredClaims.length > 0;
-  const header = showSource ? "| | Claim | Source | Evidence |\n|:--:|---|---|---|" : "| | Claim | Evidence |\n|:--:|---|---|";
-  const rows = claims.map((c) => {
-    const cells = [STATUS_EMOJI[c.status], cell(c.text)];
-    if (showSource) {
-      cells.push(isInferred(c) ? `inferred \xB7 ${c.confidence.toUpperCase()}` : "stated");
-    }
-    cells.push(evidenceLinks(c, ctx));
-    return `| ${cells.join(" | ")} |`;
-  });
-  return [header, ...rows].join("\n");
-}
-function unstatedSection(changes) {
-  if (changes.length === 0) return null;
-  const items = changes.map(
-    (u) => `- ${RISK_EMOJI[u.risk]} **${u.file}** (${u.risk} risk) \u2014 ${u.description}`
-  );
-  return [`### \u26A0\uFE0F Unstated changes`, ``, ...items].join("\n");
-}
-function signalLine(review) {
-  const weakest = [...review.signalScore.components].filter((c) => c.earned < c.max).sort((a, b) => a.earned - b.earned).slice(0, 2).map((c) => c.note);
-  const detail = weakest.length > 0 ? ` \u2014 ${weakest.join(", ")}` : "";
-  return `Signal ${review.signalScore.total}/100${detail}`;
-}
-function reviewToMarkdown(review, ctx) {
-  const parts = [RUBRIC_COMMENT_MARKER];
-  parts.push(`## ${VERDICT_BADGE[review.verdict]}`);
-  parts.push(review.summary);
-  parts.push(`### Claims
-
-${claimsTable(review, ctx)}`);
-  const unstated = unstatedSection(review.unstatedChanges);
-  if (unstated) parts.push(unstated);
-  if (review.truncated) {
-    parts.push(
-      `> \u26A0\uFE0F The diff was truncated to fit the token budget \u2014 some files were not reviewed.`
-    );
-  }
-  const tokenNote = ctx.inputTokens !== void 0 ? ` \xB7 ${ctx.inputTokens} input tokens` : "";
-  const signalNote = review.inference.ran ? ` \xB7 ${signalLine(review)}` : "";
-  parts.push(`---
-<sub>Reviewed by Rubric \xB7 \`${ctx.model}\`${signalNote}${tokenNote}</sub>`);
-  return parts.join("\n\n") + "\n";
 }
 var SIGNAL_WEIGHTS = {
   description: 25,
@@ -50966,6 +50893,176 @@ function scoreSignal(ctx) {
   const total = components.reduce((sum, c) => sum + c.earned, 0);
   return { total, band: bandFor(total), components };
 }
+var VERDICT_BADGE = {
+  aligned: "\u2705 Aligned",
+  partially_aligned: "\u26A0\uFE0F Partially aligned",
+  misaligned: "\u274C Misaligned"
+};
+var STATUS_EMOJI = {
+  implemented: "\u2705",
+  partial: "\u{1F7E1}",
+  missing: "\u2B55",
+  contradicted: "\u274C"
+};
+var RISK_EMOJI = {
+  low: "\u26AA",
+  medium: "\u{1F7E0}",
+  high: "\u{1F534}"
+};
+function allClaims(review) {
+  return [...review.statedClaims, ...review.inferredClaims];
+}
+function isInferred(claim) {
+  return "confidence" in claim;
+}
+function cell(text) {
+  return text.replace(/\|/g, "\\|").replace(/\r?\n/g, " ").trim();
+}
+function linesToAnchor(lines) {
+  const range = /^\s*(\d+)\s*-\s*(\d+)\s*$/.exec(lines);
+  if (range) return `#L${range[1]}-L${range[2]}`;
+  const single = /^\s*(\d+)\s*$/.exec(lines);
+  if (single) return `#L${single[1]}`;
+  return "";
+}
+function evidenceLinks(claim, ctx) {
+  if (claim.evidence.length === 0) return "\u2014";
+  return claim.evidence.map((e) => {
+    const anchor = linesToAnchor(e.lines);
+    const url2 = `https://github.com/${ctx.owner}/${ctx.repo}/blob/${ctx.headSha}/${e.file}${anchor}`;
+    return `[${e.file}${anchor}](${url2})`;
+  }).join("<br>");
+}
+function claimsTable(review, ctx) {
+  const claims = allClaims(review);
+  if (claims.length === 0) return "_No checkable claims were identified._";
+  const showSource = review.inferredClaims.length > 0;
+  const header = showSource ? "| | Claim | Source | Evidence |\n|:--:|---|---|---|" : "| | Claim | Evidence |\n|:--:|---|---|";
+  const rows = claims.map((c) => {
+    const cells = [STATUS_EMOJI[c.status], cell(c.text)];
+    if (showSource) {
+      cells.push(isInferred(c) ? `inferred \xB7 ${c.confidence.toUpperCase()}` : "stated");
+    }
+    cells.push(evidenceLinks(c, ctx));
+    return `| ${cells.join(" | ")} |`;
+  });
+  return [header, ...rows].join("\n");
+}
+function unstatedSection(changes) {
+  if (changes.length === 0) return null;
+  const items = changes.map(
+    (u) => `- ${RISK_EMOJI[u.risk]} **${u.file}** (${u.risk} risk) \u2014 ${u.description}`
+  );
+  return [`### \u26A0\uFE0F Unstated changes`, ``, ...items].join("\n");
+}
+function signalLine(review) {
+  const weakest = [...review.signalScore.components].filter((c) => c.earned < c.max).sort((a, b) => a.earned - b.earned).slice(0, 2).map((c) => c.note);
+  const detail = weakest.length > 0 ? ` \u2014 ${weakest.join(", ")}` : "";
+  return `Signal ${review.signalScore.total}/100${detail}`;
+}
+function lowSignalNotice(review) {
+  if (!review.inference.ran) return null;
+  if (review.signalScore.total >= LOW_SIGNAL_THRESHOLD) return null;
+  return `> \u26A0\uFE0F Low signal (${review.signalScore.total}/100) \u2014 expected behavior was inferred from limited PR context. Consider adding a description or linking an issue.`;
+}
+function reviewToMarkdown(review, ctx) {
+  const parts = [RUBRIC_COMMENT_MARKER];
+  parts.push(`## ${VERDICT_BADGE[review.verdict]}`);
+  parts.push(review.summary);
+  const lowSignal = lowSignalNotice(review);
+  if (lowSignal) parts.push(lowSignal);
+  parts.push(`### Claims
+
+${claimsTable(review, ctx)}`);
+  const unstated = unstatedSection(review.unstatedChanges);
+  if (unstated) parts.push(unstated);
+  if (review.truncated) {
+    parts.push(
+      `> \u26A0\uFE0F The diff was truncated to fit the token budget \u2014 some files were not reviewed.`
+    );
+  }
+  const tokenNote = ctx.inputTokens !== void 0 ? ` \xB7 ${ctx.inputTokens} input tokens` : "";
+  const signalNote = review.inference.ran ? ` \xB7 ${signalLine(review)}` : "";
+  parts.push(`---
+<sub>Reviewed by Rubric \xB7 \`${ctx.model}\`${signalNote}${tokenNote}</sub>`);
+  return parts.join("\n\n") + "\n";
+}
+var SpecItemSchema = external_exports.object({
+  text: external_exports.string().describe("A single expected behavior, stated concretely"),
+  kind: external_exports.enum(["behavior", "edge_case", "acceptance"]),
+  confidence: external_exports.enum(["high", "medium", "low"]).describe("How directly the PR context supports this expectation")
+});
+var ImpliedSpecSchema = external_exports.object({
+  items: external_exports.array(SpecItemSchema)
+});
+var DEFAULT_INFER_MAX_OUTPUT_TOKENS = 4e3;
+var INFER_SYSTEM_PROMPT = `You are Rubric's spec-inference stage. Given only a pull request's stated intent and the shape of its changes, describe what the finished change should do.
+
+You will not see the code. You are given file names, statuses, and line counts, but never the diff itself. Do not speculate about how something is implemented \u2014 describe only observable expected behavior. If the context does not support a claim, either omit it or mark it low confidence.
+
+Produce a flat list of items across three kinds:
+- behavior: the happy path. What should be true once this change works.
+- edge_case: what should happen in unusual or failure situations the intent implies.
+- acceptance: how a reviewer could verify the change is complete.
+
+Rate each item's confidence by how directly the context supports it:
+- high: stated outright in the title, description, or linked issue.
+- medium: a normal, near-certain consequence of what was stated.
+- low: a reasonable expectation that the context only hints at.
+
+Derive consequences the author did not write down \u2014 that is the entire value here. "Prevent double-click on submit" implies the control becomes disabled, in-flight state is visible, and repeat submissions cannot fire. But stay proportionate to the change's stated scope: a one-line fix does not imply a redesign.`;
+function buildInferSystemPrompt() {
+  return INFER_SYSTEM_PROMPT;
+}
+function buildInferUserPrompt(ctx) {
+  const sections = [];
+  const intent = [
+    `# PR intent`,
+    ``,
+    `Title: ${ctx.title}`,
+    ``,
+    `Description:`,
+    ctx.body.trim() || "(no description provided)"
+  ];
+  if (ctx.labels.length > 0) intent.push(``, `Labels: ${ctx.labels.join(", ")}`);
+  if (ctx.linkedIssue) {
+    intent.push(
+      ``,
+      `Linked issue #${ctx.linkedIssue.number}: ${ctx.linkedIssue.title}`,
+      ctx.linkedIssue.body.trim() || "(no issue body)"
+    );
+  }
+  sections.push(intent.join("\n"));
+  if (ctx.commits.length > 0) {
+    const lines = ctx.commits.map((c) => `- ${c.message.split("\n", 1)[0]}`);
+    sections.push([`# Commit messages`, ...lines].join("\n"));
+  }
+  const files = ctx.fileSummary.map(
+    (f) => `- ${f.filename} (${f.status}, +${f.additions}/-${f.deletions})`
+  );
+  sections.push(
+    [
+      `# Files changed (shape only, no contents)`,
+      ...files.length > 0 ? files : ["(no files changed)"]
+    ].join("\n")
+  );
+  sections.push(`Infer the implied specification for this pull request.`);
+  return sections.join("\n\n");
+}
+async function inferSpec(ctx, opts) {
+  const response = await opts.client.messages.parse({
+    model: opts.model,
+    max_tokens: opts.maxOutputTokens ?? DEFAULT_INFER_MAX_OUTPUT_TOKENS,
+    thinking: { type: "adaptive" },
+    system: buildInferSystemPrompt(),
+    messages: [{ role: "user", content: buildInferUserPrompt(ctx) }],
+    output_config: { format: zodOutputFormat(ImpliedSpecSchema) }
+  });
+  if (!response.parsed_output) {
+    throw new Error(`Spec inference parse failed (stop_reason: ${response.stop_reason})`);
+  }
+  return response.parsed_output;
+}
 var DEFAULT_MODEL = "claude-opus-4-8";
 var DEFAULT_MAX_DIFF_TOKENS = 5e4;
 var DEFAULT_MAX_OUTPUT_TOKENS = 16e3;
@@ -50985,18 +51082,29 @@ async function reviewPullRequest(context3, files, opts) {
     return input_tokens2;
   };
   const ranked = rankFiles(filterFiles(files));
-  const budget = await truncateToBudget(ranked, maxDiffTokens, countTokens);
+  const shouldInfer = opts.infer ?? true;
+  let inferError;
+  const [spec, budget] = await Promise.all([
+    shouldInfer ? inferSpec(context3, { client, model }).catch((err) => {
+      inferError = err instanceof Error ? err.message : String(err);
+      log(`spec inference failed, continuing with stated claims only: ${inferError}`);
+      return null;
+    }) : Promise.resolve(null),
+    truncateToBudget(ranked, maxDiffTokens, countTokens)
+  ]);
   if (budget.truncated) {
     log(
       `diff truncated: kept ${budget.files.length} file(s), omitted ${budget.omitted.length}`
     );
   }
+  if (spec) log(`inferred ${spec.items.length} spec item(s)`);
   const user = buildUserPrompt({
     title: context3.title,
     body: context3.body,
     linkedIssue: context3.linkedIssue,
     diffText: budget.diffText,
-    truncated: budget.truncated
+    truncated: budget.truncated,
+    impliedSpec: spec
   });
   const { input_tokens } = await client.messages.countTokens({
     model,
@@ -51015,10 +51123,12 @@ async function reviewPullRequest(context3, files, opts) {
   if (!response.parsed_output) {
     throw new Error(`Review parse failed (stop_reason: ${response.stop_reason})`);
   }
-  const inference = { ran: false, reason: "not enabled" };
+  const inference = !shouldInfer ? { ran: false, reason: "disabled" } : spec === null ? { ran: false, reason: inferError ?? "inference failed" } : { ran: true };
   return {
     ...response.parsed_output,
-    inferredClaims: [],
+    // Provenance is a fact the code owns: no spec means nothing was inferred,
+    // whatever the model chose to put in that array.
+    inferredClaims: spec === null ? [] : response.parsed_output.inferredClaims,
     truncated: budget.truncated,
     signalScore,
     inference
