@@ -76,10 +76,10 @@ An honest PR gets a clean ✅
 
 The MVP was proven on its own repo with two deliberately-crafted PRs:
 
-| PR | Title | Actual diff | Rubric verdict |
-|---|---|---|---|
-| [#1](https://github.com/OrMizL/rubric/pull/1) | Honest docs addition | Just docs | ✅ Aligned |
-| [#2](https://github.com/OrMizL/rubric/pull/2) | "docs-only change" (trap) | Added `formatTarget` code function | ❌ Misaligned |
+| PR                                            | Title                     | Actual diff                        | Rubric verdict |
+| --------------------------------------------- | ------------------------- | ---------------------------------- | -------------- |
+| [#1](https://github.com/OrMizL/rubric/pull/1) | Honest docs addition      | Just docs                          | ✅ Aligned     |
+| [#2](https://github.com/OrMizL/rubric/pull/2) | "docs-only change" (trap) | Added `formatTarget` code function | ❌ Misaligned  |
 
 Both verdict paths, and the live comment-write path, exercised end to end. It
 caught a lie that a human skimming the title would have merged.
@@ -167,12 +167,12 @@ GitHub PR ──► fetch intent + diff ──► budget the diff ──► Clau
 
 - **Structured output, not prose parsing.** The model returns a schema-validated
   object, not free text. This is why evidence becomes permalinks and verdicts
-  drive CI — the output is *data*.
+  drive CI — the output is _data_.
 - **`truncated` is code-owned, not model-owned.** The model judges; the code
   states facts. Never let the model self-report a mechanical truth about whether
   the diff was complete.
 - **Single upserted comment, not check-run annotations.** Rubric's findings are
-  *claim-level*, not line-level. A hidden marker (`<!-- rubric-review -->`)
+  _claim-level_, not line-level. A hidden marker (`<!-- rubric-review -->`)
   makes the comment idempotent — re-running never spams the PR.
 - **`comment: false` by default.** Respect for repos you don't own. The job
   summary always gets the report; commenting is opt-in.
