@@ -51,13 +51,19 @@ export function filterFiles(files: ChangedFile[]): ChangedFile[] {
     });
 }
 
+/** True for test/spec files. Exported so signal scoring shares one definition. */
+export function isTestFile(filename: string): boolean {
+    const name = basename(filename);
+    return (
+        /(^|\/)(__tests__|tests?|spec|__mocks__)\//.test(filename) ||
+        /\.(test|spec)\.[cm]?[jt]sx?$/.test(name)
+    );
+}
+
 /** Rank category: lower sorts first. src > config > tests > docs > other. */
 function category(filename: string): number {
     const name = basename(filename);
-    if (
-        /(^|\/)(__tests__|tests?|spec|__mocks__)\//.test(filename) ||
-        /\.(test|spec)\.[cm]?[jt]sx?$/.test(name)
-    ) {
+    if (isTestFile(filename)) {
         return 2; // tests
     }
     if (
