@@ -629,7 +629,7 @@ export function scoreSignal(ctx: ReviewContext): SignalScore {
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `pnpm --filter @rubric/core exec vitest run src/confidence.test.ts`
-Expected: PASS, 11 tests.
+Expected: PASS, 12 tests.
 
 - [ ] **Step 6: Verify the repo is green and commit**
 
