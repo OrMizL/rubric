@@ -50522,6 +50522,7 @@ var ReviewSchema = external_exports.object({
 });
 var RUBRIC_COMMENT_MARKER = "<!-- rubric-review -->";
 var LINKED_ISSUE_RE = /(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/i;
+var MAX_COMMITS = 100;
 var GitHubClient = class {
   octokit;
   constructor(opts) {
@@ -50534,7 +50535,8 @@ var GitHubClient = class {
       body: data.body ?? "",
       baseRef: data.base.ref,
       headRef: data.head.ref,
-      headSha: data.head.sha
+      headSha: data.head.sha,
+      labels: data.labels.map((l) => l.name)
     };
   }
   /** Parse the first closing keyword in `body` and fetch that issue, if any. */
@@ -50569,14 +50571,26 @@ var GitHubClient = class {
       patch: f.patch
     }));
   }
+  /** Commit messages on the PR branch. A single page is requested, so this caps at MAX_COMMITS. */
+  async getCommits(owner, repo, number4) {
+    const { data } = await this.octokit.pulls.listCommits({
+      owner,
+      repo,
+      pull_number: number4,
+      per_page: MAX_COMMITS
+    });
+    return data.map((c) => ({ sha: c.sha, message: c.commit.message }));
+  }
   /** One call that assembles everything the engine needs about a PR. */
   async getPullRequestData(owner, repo, number4) {
     const pr = await this.getPullRequest(owner, repo, number4);
-    const [linkedIssue, files] = await Promise.all([
+    const [linkedIssue, files, commits] = await Promise.all([
       this.getLinkedIssue(owner, repo, pr.body),
-      this.getFiles(owner, repo, number4)
+      this.getFiles(owner, repo, number4),
+      // Commits are a nice-to-have signal; a failure here must not sink the review.
+      this.getCommits(owner, repo, number4).catch(() => [])
     ]);
-    return { owner, repo, number: number4, ...pr, linkedIssue, files };
+    return { owner, repo, number: number4, ...pr, linkedIssue, files, commits };
   }
   /**
    * Create-or-update Rubric's single review comment, identified by a hidden marker.
