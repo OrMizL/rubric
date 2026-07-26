@@ -1,36 +1,209 @@
 {
   "verdict": "misaligned",
-  "summary": "The PR claims to be a documentation-only change adding an Installation section to the README, but the diff contains no README changes at all. Instead, it modifies the core slugify logic in index.js and adds a test case, directly contradicting the stated intent.",
+  "summary": "The PR claims to be documentation-only, adding an Installation section to the README, but the diff contains no README changes at all. Instead it modifies index.js (reordering and rewriting the contraction/possessive regex) and adds a test case — directly contradicting the 'no code or behavior changes' claim.",
   "statedClaims": [
     {
       "id": "c1",
-      "text": "Adds an Installation section to the README covering npm install and yarn add commands",
+      "text": "Adds an Installation section to the README covering npm install slugify and yarn add slugify",
       "status": "missing",
-      "evidence": [],
-      "explanation": "No README file appears in the diff. The claimed documentation addition is entirely absent."
+      "evidence": [
+        {
+          "file": "index.js",
+          "lines": "whole file"
+        },
+        {
+          "file": "test.js",
+          "lines": "whole file"
+        }
+      ],
+      "explanation": "No README file is touched anywhere in the diff. The only changed files are index.js and test.js. The core stated deliverable is entirely absent."
     },
     {
       "id": "c2",
       "text": "No code or behavior changes",
       "status": "contradicted",
-      "evidence": [{ "file": "index.js", "lines": "75-84" }],
-      "explanation": "index.js is modified: the contraction/possessive detection was moved earlier and its regex changed from matching hyphen-delimited patterns (/([a-zA-Z\\d]+)-([ts])(-|$)/) to apostrophe-delimited patterns (/([a-zA-Z\\d]+)'([ts])(\\s|$)/). This is a substantive behavior change, directly contradicting the 'no code or behavior changes' claim."
+      "evidence": [
+        {
+          "file": "index.js",
+          "lines": "75-87"
+        }
+      ],
+      "explanation": "index.js changes the contraction/possessive handling: the regex is rewritten from matching '-t'/'-s' to matching apostrophes ('t/'s) and is moved to run before the main patternSlug replacement. This is a real behavior change, directly contradicting the claim."
+    }
+  ],
+  "inferredClaims": [
+    {
+      "id": "i1",
+      "text": "Slugify performs contraction/possessive replacement before applying the main character pattern replacement.",
+      "status": "implemented",
+      "evidence": [
+        {
+          "file": "index.js",
+          "lines": "75-87"
+        }
+      ],
+      "explanation": "The apostrophe-handling replace is moved above the `string.replace(patternSlug, options.separator)` line, so it now runs before the main pattern step.",
+      "confidence": "high",
+      "kind": "behavior"
+    },
+    {
+      "id": "i2",
+      "text": "Strings containing possessives or contractions produce a slug where apostrophe characters are resolved correctly rather than stripped or mishandled.",
+      "status": "implemented",
+      "evidence": [
+        {
+          "file": "index.js",
+          "lines": "78"
+        }
+      ],
+      "explanation": "The new regex `/([a-zA-Z\\d]+)'([ts])(\\s|$)/g` operates on the raw apostrophe before slugification, matching the existing possessive tests (Conway's -> conways, etc.).",
+      "confidence": "medium",
+      "kind": "behavior"
+    },
+    {
+      "id": "i3",
+      "text": "The reordering does not alter slug output for inputs that contain no contractions or possessives.",
+      "status": "partial",
+      "evidence": [
+        {
+          "file": "test.js",
+          "lines": "37"
+        }
+      ],
+      "explanation": "The added test guards one dashed-input edge case, but there is no broad verification that reordering leaves all non-contraction inputs unchanged; only reasoning supports it.",
+      "confidence": "medium",
+      "kind": "edge_case"
+    },
+    {
+      "id": "i4",
+      "text": "Inputs with multiple apostrophes or mixed contractions and special characters are handled consistently under the new ordering.",
+      "status": "missing",
+      "evidence": [
+        {
+          "file": "test.js",
+          "lines": "34-38"
+        }
+      ],
+      "explanation": "No new test covers multiple apostrophes or mixed special-character inputs under the new ordering.",
+      "confidence": "low",
+      "kind": "edge_case"
+    },
+    {
+      "id": "i5",
+      "text": "A test case is added covering the contraction/possessive replacement behavior.",
+      "status": "partial",
+      "evidence": [
+        {
+          "file": "test.js",
+          "lines": "37"
+        }
+      ],
+      "explanation": "A test line is added, but it asserts a dashed input `it-s-hould-not-modify-t-his` is left unmodified — a negative/regression guard rather than a positive contraction/possessive case.",
+      "confidence": "high",
+      "kind": "acceptance"
+    },
+    {
+      "id": "i6",
+      "text": "The existing test suite continues to pass with the changed replacement ordering.",
+      "status": "partial",
+      "evidence": [
+        {
+          "file": "test.js",
+          "lines": "34-38"
+        }
+      ],
+      "explanation": "Existing possessive/contraction assertions remain and appear consistent with the new regex, but the suite cannot be executed here to confirm.",
+      "confidence": "high",
+      "kind": "acceptance"
+    },
+    {
+      "id": "i7",
+      "text": "The added test demonstrates the corrected slug output for at least one contraction or possessive input.",
+      "status": "contradicted",
+      "evidence": [
+        {
+          "file": "test.js",
+          "lines": "37"
+        }
+      ],
+      "explanation": "The single added assertion is not a contraction/possessive input; it checks that a dashed string is NOT modified, so it does not demonstrate corrected contraction/possessive output.",
+      "confidence": "medium",
+      "kind": "acceptance"
+    },
+    {
+      "id": "i8",
+      "text": "Despite the PR title referencing README installation instructions, the actual change modifies index.js behavior; the mismatch should be reconciled.",
+      "status": "implemented",
+      "evidence": [
+        {
+          "file": "index.js",
+          "lines": "75-87"
+        },
+        {
+          "file": "test.js",
+          "lines": "37"
+        }
+      ],
+      "explanation": "The mismatch is confirmed: no README change exists while index.js behavior and tests are modified, exactly the discrepancy this item flags.",
+      "confidence": "low",
+      "kind": "acceptance"
     }
   ],
   "unstatedChanges": [
     {
       "file": "index.js",
-      "description": "Reordered and rewrote the contraction/possessive handling regex, changing it from operating on hyphenated output to operating on raw apostrophes before slug pattern replacement — a real behavioral change to slug generation.",
+      "description": "Rewrites the contraction/possessive regex from dash-based ('-t'/'-s') to apostrophe-based (''t'/''s') and moves it to run before the main pattern replacement — a behavior change entirely unrelated to the stated documentation intent.",
       "risk": "high"
     },
     {
       "file": "test.js",
-      "description": "Added a test asserting that 'it-s-hould-not-modify-t-his' is left unchanged, reflecting the behavior change in index.js.",
+      "description": "Adds a regression test asserting a dashed input is left unmodified, again unrelated to adding README installation instructions.",
       "risk": "medium"
     }
   ],
-  "inferredClaims": [],
-  "signalScore": { "total": 0, "band": "low", "components": [] },
-  "inference": { "ran": false, "reason": "fixture predates inference" },
-  "truncated": false
+  "truncated": false,
+  "signalScore": {
+    "total": 48,
+    "band": "low",
+    "components": [
+      {
+        "key": "description",
+        "label": "Description detail",
+        "max": 25,
+        "earned": 3,
+        "note": "146 chars, 1 paragraph(s)"
+      },
+      {
+        "key": "linkedIssue",
+        "label": "Linked issue",
+        "earned": 0,
+        "max": 20,
+        "note": "none linked"
+      },
+      {
+        "key": "commits",
+        "label": "Commit quality",
+        "earned": 5,
+        "max": 15,
+        "note": "1 of 1 commit(s) substantive"
+      },
+      {
+        "key": "tests",
+        "label": "Tests touched",
+        "earned": 20,
+        "max": 20,
+        "note": "test files changed"
+      },
+      {
+        "key": "focus",
+        "label": "Scope focus",
+        "earned": 20,
+        "max": 20,
+        "note": "1 top-level directory touched"
+      }
+    ]
+  },
+  "inference": {
+    "ran": true
+  }
 }

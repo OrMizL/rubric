@@ -1,45 +1,300 @@
 {
   "verdict": "aligned",
-  "summary": "The PR moves the contraction/possession removal to operate on the raw input string (matching apostrophes) before the main slug pattern replacement, exactly as described. This correctly avoids the reported bug where slugified strings ending in `-s`/`-t` were wrongly modified, and a regression test is added.",
+  "summary": "The PR moves the contraction/possession removal ahead of the main slug pattern replacement and rewrites the regex to operate on the raw input (matching apostrophes and whitespace) rather than the already-slugified string (which matched hyphens). This directly addresses issue #72, and a regression test is added. The changes are minimal and confined to the stated concern.",
   "statedClaims": [
     {
       "id": "c1",
-      "text": "Perform the contraction/possession replacement before the main pattern replacement",
+      "text": "Perform contraction/possession replacement before the main pattern replacement",
       "status": "implemented",
-      "evidence": [{ "file": "index.js", "lines": "78-84" }],
-      "explanation": "The new replace call using the apostrophe pattern is now placed above `string.replace(patternSlug, ...)`, whereas previously the dash-based replacement occurred after it."
+      "evidence": [
+        {
+          "file": "index.js",
+          "lines": "75-84"
+        }
+      ],
+      "explanation": "The contraction replacement line (now using an apostrophe pattern) is moved above `string.replace(patternSlug, ...)`, and the old post-slug replacement is removed."
     },
     {
       "id": "c2",
-      "text": "Perform the replacement on the input string instead of the already slugified string",
+      "text": "Perform the replacement on the input string instead of the already-slugified string",
       "status": "implemented",
-      "evidence": [{ "file": "index.js", "lines": "78-80" }],
-      "explanation": "The regex now matches on apostrophes (`'([ts])`) which only exist in the raw/lowercased input, not in the slug where they'd have been converted to separators. This confirms the operation runs on pre-slugified text."
+      "evidence": [
+        {
+          "file": "index.js",
+          "lines": "78"
+        }
+      ],
+      "explanation": "The new regex `/([a-zA-Z\\d]+)'([ts])(\\s|$)/g` matches apostrophes and whitespace present in the raw (lowercased) input, and runs before slugification."
     },
     {
       "id": "c3",
-      "text": "Fixes #72 — partial strings ending in `-s`/`-t` are no longer incorrectly modified",
+      "text": "Fix #72 (partial strings ending in -s/-t incorrectly losing the hyphen)",
       "status": "implemented",
       "evidence": [
-        { "file": "index.js", "lines": "78-80" },
-        { "file": "test.js", "lines": "37" }
+        {
+          "file": "index.js",
+          "lines": "76-78"
+        },
+        {
+          "file": "test.js",
+          "lines": "37"
+        }
       ],
-      "explanation": "Because the pattern now keys off apostrophes rather than dashes, a slug like `article-t` is untouched. The added test `slugify('it-s-hould-not-modify-t-his')` asserting an unchanged result verifies this behavior."
+      "explanation": "Because detection now keys on apostrophes in raw input rather than hyphens in the slug, a slug-produced `-s`/`-t` is no longer stripped. The new test `it-s-hould-not-modify-t-his` asserts the previously-buggy behavior no longer occurs."
     },
     {
       "id": "c4",
-      "text": "Implicit: no unrelated behavior changes",
+      "text": "Nothing else changes beyond the reordering (implicit)",
       "status": "implemented",
       "evidence": [
-        { "file": "index.js", "lines": "75-88" },
-        { "file": "test.js", "lines": "34-38" }
+        {
+          "file": "index.js",
+          "lines": "75-84"
+        },
+        {
+          "file": "test.js",
+          "lines": "37"
+        }
       ],
-      "explanation": "Existing possessive/contraction tests (Conway's, Don't, parents') remain and the only changes are the relocated/reworked replacement plus one added regression test."
+      "explanation": "Only the contraction-removal line and one test line are touched; the regex change is a necessary consequence of operating on raw input rather than an unrelated change."
     }
   ],
-  "unstatedChanges": [],
-  "inferredClaims": [],
-  "signalScore": { "total": 0, "band": "low", "components": [] },
-  "inference": { "ran": false, "reason": "fixture predates inference" },
-  "truncated": false
+  "inferredClaims": [
+    {
+      "id": "i1",
+      "text": "Contraction/possession replacement is applied to the raw input string before the main slugification pattern replacement.",
+      "status": "implemented",
+      "evidence": [
+        {
+          "file": "index.js",
+          "lines": "75-84"
+        }
+      ],
+      "explanation": "The apostrophe-based replacement is executed prior to `patternSlug` replacement.",
+      "confidence": "high",
+      "kind": "behavior"
+    },
+    {
+      "id": "i2",
+      "text": "Typing 'article title' produces 'article-title' rather than 'articlet'.",
+      "status": "implemented",
+      "evidence": [
+        {
+          "file": "index.js",
+          "lines": "78"
+        }
+      ],
+      "explanation": "The regex now requires an apostrophe (not a hyphen), so 'article title' has no match and slugifies normally to 'article-title'. Logic supports this though no explicit test for that exact string was added.",
+      "confidence": "high",
+      "kind": "behavior"
+    },
+    {
+      "id": "i3",
+      "text": "A hyphen produced by slugification followed by 's' or 't' is no longer stripped.",
+      "status": "implemented",
+      "evidence": [
+        {
+          "file": "index.js",
+          "lines": "76-78"
+        },
+        {
+          "file": "test.js",
+          "lines": "37"
+        }
+      ],
+      "explanation": "The removal no longer runs on the slugified output; the new test confirms hyphens before s/t are preserved.",
+      "confidence": "high",
+      "kind": "behavior"
+    },
+    {
+      "id": "i4",
+      "text": "Actual contractions/possessions in the original input are still correctly removed.",
+      "status": "implemented",
+      "evidence": [
+        {
+          "file": "test.js",
+          "lines": "34-36"
+        },
+        {
+          "file": "index.js",
+          "lines": "78"
+        }
+      ],
+      "explanation": "Cases like Conway's and Don't remain handled by matching `'s`/`'t` in raw input; existing assertions unchanged.",
+      "confidence": "medium",
+      "kind": "behavior"
+    },
+    {
+      "id": "i5",
+      "text": "Existing slug outputs for complete strings remain unchanged and pass previous tests.",
+      "status": "implemented",
+      "evidence": [
+        {
+          "file": "test.js",
+          "lines": "34-37"
+        }
+      ],
+      "explanation": "Existing test assertions are untouched, indicating expected outputs are preserved.",
+      "confidence": "medium",
+      "kind": "behavior"
+    },
+    {
+      "id": "i6",
+      "text": "Live/incremental input transformation produces stable intermediate slugs without dropping legitimate separators.",
+      "status": "implemented",
+      "evidence": [
+        {
+          "file": "index.js",
+          "lines": "78"
+        },
+        {
+          "file": "test.js",
+          "lines": "37"
+        }
+      ],
+      "explanation": "The apostrophe-keyed detection avoids stripping hyphens from partial inputs, the core of the fix.",
+      "confidence": "medium",
+      "kind": "behavior"
+    },
+    {
+      "id": "i7",
+      "text": "Input that legitimately ends in '-s' or '-t' after slugification retains the hyphen.",
+      "status": "implemented",
+      "evidence": [
+        {
+          "file": "test.js",
+          "lines": "37"
+        }
+      ],
+      "explanation": "Directly asserted by the new regression test.",
+      "confidence": "high",
+      "kind": "edge_case"
+    },
+    {
+      "id": "i8",
+      "text": "An input genuinely containing a contraction ending in s or t is still handled under the new ordering.",
+      "status": "implemented",
+      "evidence": [
+        {
+          "file": "test.js",
+          "lines": "34-35"
+        },
+        {
+          "file": "index.js",
+          "lines": "78"
+        }
+      ],
+      "explanation": "Conway's and Don't cases are still covered and match the new regex against raw input.",
+      "confidence": "medium",
+      "kind": "edge_case"
+    },
+    {
+      "id": "i9",
+      "text": "Empty or separator-only input still returns a valid result without error.",
+      "status": "missing",
+      "evidence": [
+        {
+          "file": "index.js",
+          "lines": "75-84"
+        }
+      ],
+      "explanation": "No test or code addresses empty/separator-only input; the diff neither breaks nor explicitly validates this case.",
+      "confidence": "low",
+      "kind": "edge_case"
+    },
+    {
+      "id": "i10",
+      "text": "A new test covers the partial-input scenario (e.g. 'article title' -> 'article-title') and passes.",
+      "status": "partial",
+      "evidence": [
+        {
+          "file": "test.js",
+          "lines": "37"
+        }
+      ],
+      "explanation": "A new regression test was added (`it-s-hould-not-modify-t-his`), which covers the same class of bug, but not the specific 'article title' -> 'article-title' scenario named in the issue.",
+      "confidence": "high",
+      "kind": "acceptance"
+    },
+    {
+      "id": "i11",
+      "text": "The full existing test suite passes with the reordered replacement logic.",
+      "status": "implemented",
+      "evidence": [
+        {
+          "file": "test.js",
+          "lines": "34-37"
+        }
+      ],
+      "explanation": "Existing assertions remain valid under the new logic; cannot execute tests here but no changes contradict them.",
+      "confidence": "high",
+      "kind": "acceptance"
+    },
+    {
+      "id": "i12",
+      "text": "Reviewer confirms issue #72's reported case no longer reproduces.",
+      "status": "missing",
+      "evidence": [
+        {
+          "file": "index.js",
+          "lines": "76-78"
+        }
+      ],
+      "explanation": "External reviewer confirmation is not verifiable from the diff, though the added test and logic strongly support the fix.",
+      "confidence": "high",
+      "kind": "acceptance"
+    }
+  ],
+  "unstatedChanges": [
+    {
+      "file": "index.js",
+      "description": "Beyond reordering, the regex itself was changed from `/([a-zA-Z\\d]+)-([ts])(-|$)/g` (hyphen/slug-based) to `/([a-zA-Z\\d]+)'([ts])(\\s|$)/g` (apostrophe/whitespace-based). This is a necessary consequence of operating on raw input, but it alters the matching semantics (e.g. relies on `\\s` boundaries and apostrophes rather than separators).",
+      "risk": "low"
+    }
+  ],
+  "truncated": false,
+  "signalScore": {
+    "total": 67,
+    "band": "medium",
+    "components": [
+      {
+        "key": "description",
+        "label": "Description detail",
+        "max": 25,
+        "earned": 2,
+        "note": "111 chars, 1 paragraph(s)"
+      },
+      {
+        "key": "linkedIssue",
+        "label": "Linked issue",
+        "earned": 20,
+        "max": 20,
+        "note": "#72"
+      },
+      {
+        "key": "commits",
+        "label": "Commit quality",
+        "earned": 5,
+        "max": 15,
+        "note": "1 of 1 commit(s) substantive"
+      },
+      {
+        "key": "tests",
+        "label": "Tests touched",
+        "earned": 20,
+        "max": 20,
+        "note": "test files changed"
+      },
+      {
+        "key": "focus",
+        "label": "Scope focus",
+        "earned": 20,
+        "max": 20,
+        "note": "1 top-level directory touched"
+      }
+    ]
+  },
+  "inference": {
+    "ran": true
+  }
 }

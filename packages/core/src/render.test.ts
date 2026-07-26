@@ -45,20 +45,43 @@ describe("reviewToMarkdown", () => {
 
     it("renders evidence as GitHub blob permalinks with line anchors", () => {
         const md = reviewToMarkdown(aligned, ctx);
+        // Derive the expectation from the fixture instead of hardcoding a line range.
+        // Which lines the model cites is its call and changes whenever fixtures are
+        // regenerated; that must not fail a test about how render.ts builds a URL.
+        const e = aligned.statedClaims
+            .flatMap((c) => c.evidence)
+            .find((e) => /^\d+-\d+$/.test(e.lines))!;
+        const [start, end] = e.lines.split("-");
         expect(md).toContain(
-            "https://github.com/sindresorhus/slugify/blob/5fc6af2/index.js#L78-L84",
+            `https://github.com/sindresorhus/slugify/blob/5fc6af2/${e.file}#L${start}-L${end}`,
         );
     });
 
     it("renders a dash for a claim with no evidence", () => {
-        const md = reviewToMarkdown(misaligned, ctx);
-        // c1 (missing) has empty evidence — the row should still render.
-        expect(md).toMatch(/Adds an Installation section.*\|\s*—/s);
+        // Construct the empty-evidence case rather than relying on a fixture claim
+        // happening to have none — the model cites evidence even for missing claims.
+        const noEvidence: Review = {
+            ...misaligned,
+            statedClaims: [
+                {
+                    id: "c1",
+                    text: "Adds an Installation section to the README",
+                    status: "missing",
+                    evidence: [],
+                    explanation: "The diff contains no README changes.",
+                },
+            ],
+            inferredClaims: [],
+        };
+        expect(reviewToMarkdown(noEvidence, ctx)).toMatch(/Adds an Installation section.*\|\s*—/s);
     });
 
     it("includes an unstated-changes section only when there are any", () => {
         expect(reviewToMarkdown(misaligned, ctx).toLowerCase()).toContain("unstated changes");
-        expect(reviewToMarkdown(aligned, ctx).toLowerCase()).not.toContain("unstated changes");
+        // Empty the array explicitly: an aligned verdict does not imply the model
+        // found nothing unstated, so the fixture can't stand in for the empty case.
+        const none: Review = { ...aligned, unstatedChanges: [] };
+        expect(reviewToMarkdown(none, ctx).toLowerCase()).not.toContain("unstated changes");
     });
 
     it("lists unstated changes with file and risk", () => {
