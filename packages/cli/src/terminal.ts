@@ -1,4 +1,4 @@
-import type { Claim, Review } from "@rubric/core";
+import type { Claim, InferredClaim, Review } from "@rubric/core";
 
 /** ANSI color helpers, no-ops when color is disabled. */
 type Style = (s: string) => string;
@@ -93,6 +93,18 @@ export function renderTerminal(review: Review, opts: TerminalOptions): string {
         lines.push("");
     }
 
+    if (review.inference.ran) {
+        const s = review.signalScore;
+        const tint = s.band === "high" ? "green" : s.band === "medium" ? "yellow" : "red";
+        lines.push(c[tint](`Signal ${s.total}/100 (${s.band})`));
+        if (s.band === "low") {
+            lines.push(
+                c.dim("  Expected behavior was inferred from limited context — treat with care."),
+            );
+        }
+        lines.push("");
+    }
+
     if (review.truncated) {
         lines.push(
             c.yellow(
@@ -102,5 +114,29 @@ export function renderTerminal(review: Review, opts: TerminalOptions): string {
         lines.push("");
     }
 
+    return lines.join("\n");
+}
+
+const KIND_LABEL: Record<InferredClaim["kind"], string> = {
+    behavior: "Expected behavior",
+    edge_case: "Edge cases",
+    acceptance: "Acceptance criteria",
+};
+
+/** Print the inferred spec grouped by kind, for --show-inferred-spec. */
+export function renderInferredSpec(review: Review, opts: TerminalOptions): string {
+    const c = opts.color ? COLORED : PLAIN;
+    if (!review.inference.ran) {
+        return c.dim(`(inference did not run: ${review.inference.reason ?? "unknown"})`);
+    }
+    const lines: string[] = [c.bold("Inferred specification:")];
+    for (const kind of ["behavior", "edge_case", "acceptance"] as const) {
+        const items = review.inferredClaims.filter((i) => i.kind === kind);
+        if (items.length === 0) continue;
+        lines.push("", c.bold(`  ${KIND_LABEL[kind]}:`));
+        for (const item of items) {
+            lines.push(`    ${c.dim(item.confidence.toUpperCase().padEnd(6))} ${item.text}`);
+        }
+    }
     return lines.join("\n");
 }

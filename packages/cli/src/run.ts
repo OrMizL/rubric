@@ -7,7 +7,7 @@ import {
     type Review,
 } from "@rubric/core";
 import { parseTarget } from "./target.js";
-import { renderTerminal } from "./terminal.js";
+import { renderTerminal, renderInferredSpec } from "./terminal.js";
 
 const HELP = `rubric — scan a GitHub pull request for intent-vs-implementation alignment
 
@@ -21,6 +21,8 @@ Usage:
 Options:
   --json                 Print the raw review JSON.
   --markdown             Print the GitHub-flavored Markdown report.
+  --no-infer             Skip spec inference; review stated claims only.
+  --show-inferred-spec   Print the inferred specification before the review.
   --model <id>           Claude model id (default: ${DEFAULT_MODEL}).
   --max-diff-tokens <n>  Token budget for the diff (default: engine default).
   --fail-on-misaligned   Exit with code 2 when the verdict is misaligned.
@@ -44,6 +46,8 @@ interface Args {
     failOnMisaligned: boolean;
     color: boolean;
     help: boolean;
+    infer: boolean;
+    showInferredSpec: boolean;
 }
 
 /** Parse argv (without node/script) into structured options. */
@@ -56,6 +60,8 @@ function parseArgs(argv: string[]): Args {
         failOnMisaligned: false,
         color: process.stdout.isTTY === true && !process.env.NO_COLOR,
         help: false,
+        infer: true,
+        showInferredSpec: false,
     };
     const positionals: string[] = [];
 
@@ -77,6 +83,12 @@ function parseArgs(argv: string[]): Args {
                 break;
             case "--no-color":
                 args.color = false;
+                break;
+            case "--no-infer":
+                args.infer = false;
+                break;
+            case "--show-inferred-spec":
+                args.showInferredSpec = true;
                 break;
             case "--model":
                 args.model = argv[++i];
@@ -147,6 +159,7 @@ export async function run(argv: string[]): Promise<number> {
             anthropicApiKey: apiKey,
             model,
             maxDiffTokens: args.maxDiffTokens,
+            infer: args.infer,
         });
     } catch (err) {
         process.stderr.write(`Review failed: ${(err as Error).message}\n`);
@@ -165,6 +178,9 @@ export async function run(argv: string[]): Promise<number> {
             }),
         );
     } else {
+        if (args.showInferredSpec) {
+            process.stdout.write(`\n${renderInferredSpec(review, { color: args.color })}\n`);
+        }
         process.stdout.write(`\n${renderTerminal(review, { color: args.color })}\n`);
     }
 
