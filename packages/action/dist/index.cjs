@@ -50804,21 +50804,25 @@ function buildUserPrompt(input) {
   return sections.join("\n\n");
 }
 var SIGNAL_WEIGHTS = {
-  description: 25,
-  linkedIssue: 20,
-  commits: 15,
-  tests: 20,
+  description: 30,
+  linkedIssue: 15,
+  commits: 20,
+  tests: 15,
   focus: 20
 };
-var LOW_SIGNAL_THRESHOLD = 60;
+var LOW_SIGNAL_THRESHOLD = 50;
 var HIGH_SIGNAL_THRESHOLD = 80;
 var MIN_COMMIT_SUBJECT = 15;
 var GENERIC_COMMIT_RE = /^(wip|fix|update|changes?|stuff|misc)\b/i;
 var LIST_ITEM_RE = /^\s*([-*+]|\d+\.)\s+/m;
 var CHARS_PER_POINT = 40;
-var MAX_LENGTH_POINTS = 15;
+var MAX_LENGTH_POINTS = 20;
 function scoreDescription(body) {
-  const base = { key: "description", label: "Description detail", max: 25 };
+  const base = {
+    key: "description",
+    label: "Description detail",
+    max: SIGNAL_WEIGHTS.description
+  };
   const text = body.trim();
   if (text === "") return { ...base, earned: 0, note: "no description" };
   const length = Math.min(MAX_LENGTH_POINTS, Math.floor(text.length / CHARS_PER_POINT));
@@ -50967,7 +50971,9 @@ function signalLine(review) {
 function lowSignalNotice(review) {
   if (!review.inference.ran) return null;
   if (review.signalScore.total >= LOW_SIGNAL_THRESHOLD) return null;
-  return `> \u26A0\uFE0F Low signal (${review.signalScore.total}/100) \u2014 expected behavior was inferred from limited PR context. Consider adding a description or linking an issue.`;
+  const missing = review.signalScore.components.filter((c) => c.earned === 0).map((c) => c.note);
+  const because = missing.length > 0 ? ` \u2014 ${missing.join(", ")}` : "";
+  return `> \u26A0\uFE0F Low signal (${review.signalScore.total}/100)${because}. Expected behavior below was inferred from thin context; weigh it accordingly.`;
 }
 function reviewToMarkdown(review, ctx) {
   const parts = [RUBRIC_COMMENT_MARKER];

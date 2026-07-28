@@ -163,13 +163,13 @@
   ],
   "truncated": false,
   "signalScore": {
-    "total": 48,
+    "total": 43,
     "band": "low",
     "components": [
       {
         "key": "description",
         "label": "Description detail",
-        "max": 25,
+        "max": 30,
         "earned": 3,
         "note": "146 chars, 1 paragraph(s)"
       },
@@ -177,21 +177,21 @@
         "key": "linkedIssue",
         "label": "Linked issue",
         "earned": 0,
-        "max": 20,
+        "max": 15,
         "note": "none linked"
       },
       {
         "key": "commits",
         "label": "Commit quality",
         "earned": 5,
-        "max": 15,
+        "max": 20,
         "note": "1 of 1 commit(s) substantive"
       },
       {
         "key": "tests",
         "label": "Tests touched",
-        "earned": 20,
-        "max": 20,
+        "earned": 15,
+        "max": 15,
         "note": "test files changed"
       },
       {

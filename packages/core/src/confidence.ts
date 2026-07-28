@@ -6,17 +6,25 @@ import type { Commit } from "./types.js";
  * How much each mechanical signal contributes to the 0-100 score. These are
  * facts the code can check, not judgments: "is a title descriptive?" is a
  * judgment and deliberately has no weight here.
+ *
+ * The score gates a disclaimer saying expectations were inferred from thin
+ * context, so it must measure how much intent the author *communicated*.
+ * `linkedIssue` and `tests` are all-or-nothing facts about process rigour that
+ * a docs or CI change can never earn — weighted at 20 each they were 40% of the
+ * score, and every well-described docs PR was labelled low signal. Calibrated
+ * against vitest#7000/#10807/#10734, rubric#3/#4 and slugify#73: only #10807
+ * (empty body, generic commit) should band low, and only it does.
  */
 export const SIGNAL_WEIGHTS = {
-    description: 25,
-    linkedIssue: 20,
-    commits: 15,
-    tests: 20,
+    description: 30,
+    linkedIssue: 15,
+    commits: 20,
+    tests: 15,
     focus: 20,
 } as const;
 
 /** Below this, the review carries a low-signal disclaimer. */
-export const LOW_SIGNAL_THRESHOLD = 60;
+export const LOW_SIGNAL_THRESHOLD = 50;
 /** At or above this, context was rich enough to trust the inference. */
 export const HIGH_SIGNAL_THRESHOLD = 80;
 
@@ -43,10 +51,14 @@ const GENERIC_COMMIT_RE = /^(wip|fix|update|changes?|stuff|misc)\b/i;
 const LIST_ITEM_RE = /^\s*([-*+]|\d+\.)\s+/m;
 // Points per N characters of description, capped well below essay length.
 const CHARS_PER_POINT = 40;
-const MAX_LENGTH_POINTS = 15;
+const MAX_LENGTH_POINTS = 20;
 
 function scoreDescription(body: string): SignalComponent {
-    const base = { key: "description" as const, label: "Description detail", max: 25 };
+    const base = {
+        key: "description" as const,
+        label: "Description detail",
+        max: SIGNAL_WEIGHTS.description,
+    };
     const text = body.trim();
     if (text === "") return { ...base, earned: 0, note: "no description" };
 
