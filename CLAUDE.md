@@ -52,6 +52,25 @@ GITHUB_TOKEN=$(gh auth token) node --env-file=.env --import tsx \
 
 Env: `ANTHROPIC_API_KEY` (required for engine runs), `GITHUB_TOKEN`/`GH_TOKEN` (optional; rate limits + private repos). Local `.env` is gitignored.
 
+### Testing the Action without pushing (`packages/action/scripts/`)
+
+```bash
+pnpm --filter @rubric/action build
+packages/action/scripts/run-locally.sh sindresorhus slugify 73    # PAID ×2
+```
+
+`@actions/core` is only a convention over environment variables, so the committed bundle runs
+locally: inputs from `INPUT_*`, the webhook payload from a file at `GITHUB_EVENT_PATH`, the job
+summary and outputs from file paths. Two runner behaviors the script has to emulate, both of
+which look like product bugs if you hit them cold:
+
+- `GITHUB_OUTPUT` must point at an **existing** file, or `@actions/core` throws `Missing file at path`.
+- `action.yml` `default:` values are applied by the **runner**, not the code — so every
+  `getBooleanInput` must be set explicitly or it throws on the empty string.
+
+This covers everything in `main.ts` except `upsertComment`; the script pins `comment=false`, and
+comment idempotency can only be verified on a real PR.
+
 ## Architecture
 
 One engine, three front doors. All review logic lives in `packages/core`; `action`, `cli`, and `web` are thin.
