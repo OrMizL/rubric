@@ -23,3 +23,15 @@ jobs:
       - run: pnpm -r build
       - run: pnpm -r typecheck
       - run: pnpm -r test
+
+      # packages/action/dist/index.cjs is committed and run by GitHub Actions with
+      # no install step, so a change to packages/core that skips the rebuild ships
+      # stale code while every other job here stays green. `pnpm -r build` above
+      # already regenerated it; any drift means the commit is missing the rebuild.
+      - name: Verify the committed Action bundle is up to date
+        run: |
+          git diff --exit-code -- packages/action/dist/index.cjs || {
+            echo "::error::packages/action/dist/index.cjs is stale."
+            echo "Run: pnpm --filter @rubric/action build && git add -f packages/action/dist/index.cjs"
+            exit 1
+          }
