@@ -16,6 +16,12 @@
 set -euo pipefail
 
 OWNER=${1:?owner}; REPO=${2:?repo}; NUM=${3:?pr number}
+
+# Fail with something readable rather than a bare "Cannot find module" from node.
+BUNDLE=packages/action/dist/index.cjs
+[ -f "$BUNDLE" ] || { echo "$BUNDLE not found — run: pnpm --filter @rubric/action build" >&2; exit 1; }
+[ -f .env ] || { echo ".env not found — run this from the repo root" >&2; exit 1; }
+
 OUT=$(mktemp -d)
 
 echo "{\"pull_request\":{\"number\":$NUM}}" > "$OUT/event.json"
@@ -35,7 +41,7 @@ env "INPUT_ANTHROPIC-API-KEY=$(grep -oP '(?<=^ANTHROPIC_API_KEY=).*' .env | tr -
     "GITHUB_EVENT_PATH=$OUT/event.json" \
     "GITHUB_STEP_SUMMARY=$OUT/step-summary.md" \
     "GITHUB_OUTPUT=$OUT/outputs.txt" \
-    node packages/action/dist/index.cjs
+    node "$BUNDLE"
 
 echo
 echo "--- outputs ---"; cat "$OUT/outputs.txt"
