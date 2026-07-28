@@ -111,9 +111,16 @@ function signalLine(review: Review): string {
 function lowSignalNotice(review: Review): string | null {
     if (!review.inference.ran) return null;
     if (review.signalScore.total >= LOW_SIGNAL_THRESHOLD) return null;
+    // Name the channels that were actually empty. The old copy always advised
+    // "consider adding a description", which read as false on PRs that had a
+    // detailed one and were scored down for unrelated reasons.
+    // `note` is already phrased as a reason ("none linked", "no test files changed");
+    // `label` would render as the bare noun "linked issue".
+    const missing = review.signalScore.components.filter((c) => c.earned === 0).map((c) => c.note);
+    const because = missing.length > 0 ? ` — ${missing.join(", ")}` : "";
     return (
-        `> ⚠️ Low signal (${review.signalScore.total}/100) — expected behavior was inferred ` +
-        `from limited PR context. Consider adding a description or linking an issue.`
+        `> ⚠️ Low signal (${review.signalScore.total}/100)${because}. Expected behavior below ` +
+        `was inferred from thin context; weigh it accordingly.`
     );
 }
 
