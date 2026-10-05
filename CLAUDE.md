@@ -71,6 +71,13 @@ which look like product bugs if you hit them cold:
 This covers everything in `main.ts` except `upsertComment`; the script pins `comment=false`, and
 comment idempotency can only be verified on a real PR.
 
+### Eval harness (`packages/eval/`)
+
+Internal measurement, not part of CI. See `packages/eval/README.md`. Unit tests run in
+`pnpm -r test` (free); `pnpm eval run` and `pnpm eval generate --drafted` are PAID and refuse
+to run with `CI` set. Data lives in a private repo at `$RUBRIC_EVAL_DATA`, never in this repo:
+it holds third-party code and fabricated "smuggled" vulnerabilities attached to real repo names.
+
 ## Architecture
 
 One engine, three front doors. All review logic lives in `packages/core`; `action`, `cli`, and `web` are thin.
@@ -96,7 +103,7 @@ patches         truncate       diff          schema out
 - **`render.ts`** — `Review` → Markdown, with GitHub blob permalinks built from `headSha`.
 - **`index.ts`** — the public surface. New exports must be added here or dependents can't see them.
 
-Consumers: `packages/action/src/main.ts` (job summary always; PR comment opt-in), `packages/cli/src/{run,target,terminal}.ts` (read-only, exit 2 on `--fail-on-misaligned`), `apps/web` (static React demo replaying committed fixtures).
+Consumers: `packages/action/src/main.ts` (job summary always; PR comment opt-in), `packages/cli/src/{run,target,terminal}.ts` (read-only, exit 2 on `--fail-on-misaligned`), `apps/web` (static React demo replaying committed fixtures), `packages/eval` (internal; imports core's built dist, never bundled).
 
 ## Invariants
 
@@ -107,6 +114,11 @@ Consumers: `packages/action/src/main.ts` (job summary always; PR comment opt-in)
 - **`comment: false` by default.** The Action is report-only; the CLI never writes at all. Respect for repos you don't own is a design position, not an oversight.
 - **`packages/action/dist/index.cjs` is committed** (force-added past the gitignored `dist/`) — GitHub Actions runs it with no install step. Rebuild and commit it whenever `packages/action` or `packages/core` changes, or the Action ships stale code. Both action and CLI bundle with `noExternal: [/./]`.
 - **Inference never sees patches.** `ReviewContext.fileSummary` structurally cannot carry one, and `infer.test.ts` asserts the assembled prompt has no `@@` hunks. Do not add a patch field to reach it "just this once."
+- **`onCall` reports, never steers.** `EngineOptions.onCall` exists so `packages/eval` can
+  measure cost and latency. It must stay observation-only and fire even when a parse fails
+  (the call was still billed). A throwing observer is not isolated, so keep observers
+  non-throwing (the eval's just pushes to an array).
+- **Eval data never enters this repo.** Cases, caches, and runs live under `$RUBRIC_EVAL_DATA`.
 - **Claim provenance is code-owned.** `statedClaims` and `inferredClaims` are separate arrays; the engine clears `inferredClaims` when inference did not run. Never add a model-authored `source` tag.
 - **The model is never asked for code-owned facts.** `ReviewOutputSchema` is what the model fills; `truncated`, `signalScore`, and `inference` are attached afterward by `engine.ts`.
 

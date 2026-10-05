@@ -86,7 +86,6 @@ in the existing build → typecheck → test order.
         fileCount: number;
         smuggleLines?: number;
         smuggleTemplate?: string;
-        changesBehavior?: boolean;    // set by a human; required for scope_lie sources
         reviewedBy?: string;
         generatedBy?: { model: string; promptHash: string };
     };
@@ -179,16 +178,19 @@ rubric-eval run --split dev --config default --samples 3 --max-usd 5
 ### Cache
 
 Key = `sha256(case.input, config name + resolved options, buildSystemPrompt(), inference system
-prompt, model, sampleIndex)`.
+prompt, model, resolved token budgets, engine fingerprint, sampleIndex)`. The engine fingerprint is
+the sha256 of `@rubric/core`'s built entry.
 
-- Prompt text is part of the key, so editing `prompt.ts` or `infer.ts` invalidates automatically.
+- Prompt text and the fingerprint are part of the key, so any rebuilt core change (not only
+  `prompt.ts` or `infer.ts`) invalidates automatically.
 - `sampleIndex` (0..n-1) makes each sample a distinct call while keeping reruns free.
 - An entry stores the `Review`, the `onCall` records, wall-clock ms, and any error.
 
 ### Errors
 
 A failed parse or failed inference is recorded as an outcome (`error: "parse_failed"`, or
-`inference.ran === false` with its reason), counted in the report, and not retried indefinitely.
+`inference.ran === false` with its reason), counted in the report. Only model parse failures are
+cached; transport/API errors are not, so they retry on the next run.
 
 ### Output
 
