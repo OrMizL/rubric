@@ -3,7 +3,9 @@
 //   frequent non-null verdict, ties broken toward the more severe verdict so a split
 //   decision is never reported as the comfortable one. Errored samples do not pass.
 // - Catch rate, false alarm, partial-on-controls, smuggle buckets: n = cases.
-// - Claim recall/precision, errors, cost: pooled over every (case, sample).
+// - Claim recall/precision, errors, cost: pooled over every (case, sample). Recall and
+//   precision cover scored observations only: an errored sample yields no anchors, so
+//   it is reported through the error rates rather than as missed claims.
 // - Every rate carries a 95% Wilson interval: at ~30 cases per mutation the interval
 //   is roughly ±14 points, and the report must say so.
 import type { EvalCase, Mutation, Verdict } from "./case.js";
@@ -214,7 +216,8 @@ export function computeMetrics(obs: Observation[]): Metrics {
         let flips = 0;
         for (const g of groups.values()) {
             const v = majorityVerdict(g);
-            agreements.push(g.filter((o) => o.verdict === v).length / g.length);
+            // An all-errored case has no verdicts to agree on; counting it would read as 100%.
+            if (v !== null) agreements.push(g.filter((o) => o.verdict === v).length / g.length);
             const passes = new Set(g.map((o) => o.score?.pass === true));
             if (passes.size > 1) flips++;
         }
