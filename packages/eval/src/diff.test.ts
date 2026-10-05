@@ -116,4 +116,22 @@ describe("appendHunk", () => {
             /no patch/,
         );
     });
+
+    it("refuses to append after a no-newline marker (modified and added files)", () => {
+        const marker = "@@ -1 +1 @@\n-a\n+b\n\\ No newline at end of file";
+        expect(() => appendHunk(file(marker), ["x"])).toThrow(/no newline at end of file/i);
+        const added = file("@@ -0,0 +1 @@\n+a\n\\ No newline at end of file", { status: "added" });
+        expect(() => appendHunk(added, ["x"])).toThrow(/no newline at end of file/i);
+    });
+
+    it("anchors after oldStart when the last hunk has no old lines", () => {
+        const out = appendHunk(file("@@ -5,0 +6,2 @@\n+a\n+b"), ["c"]);
+        const hunks = parsePatch(out.patch!);
+        // Pure insertion after old line 5: old side is 5, and +2 already shifted the new side.
+        expect(hunks[1]).toMatchObject({ oldStart: 5, oldLines: 0, newStart: 8, newLines: 1 });
+    });
+
+    it("refuses an empty append", () => {
+        expect(() => appendHunk(file(TWO_HUNKS), [])).toThrow(/nothing to append/);
+    });
 });

@@ -107,8 +107,13 @@ export function removeHunks(file: ChangedFile, indexes: number[]): ChangedFile |
 export function appendHunk(file: ChangedFile, added: string[]): ChangedFile {
     if (!file.patch) throw new Error(`${file.filename} has no patch`);
     const hunks = parsePatch(file.patch);
+    if (added.length === 0) throw new Error("nothing to append");
     const body = added.map((l) => `+${l}`);
     const last = hunks[hunks.length - 1]!;
+    // Anything after the marker would read as the file's final line gaining a newline.
+    if (last.lines[last.lines.length - 1]?.startsWith("\\")) {
+        throw new Error(`cannot append to ${file.filename}: no newline at end of file`);
+    }
 
     // An added file has no old side; its one hunk simply grows.
     if (file.status === "added") {
@@ -121,7 +126,8 @@ export function appendHunk(file: ChangedFile, added: string[]): ChangedFile {
     }
 
     const delta = hunks.reduce((sum, h) => sum + (h.newLines - h.oldLines), 0);
-    const afterOld = last.oldStart + last.oldLines - 1;
+    // With no old lines the header's oldStart already names the line the insertion follows.
+    const afterOld = last.oldLines === 0 ? last.oldStart : last.oldStart + last.oldLines - 1;
     const hunk: Hunk = {
         oldStart: afterOld,
         oldLines: 0,
