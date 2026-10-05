@@ -158,7 +158,7 @@ a {
 }
 
 @media (max-width: 560px) {
-    .navlink[href="#demo"] {
+    .navlink[href^="#"] {
         display: none;
     }
 }
@@ -295,7 +295,9 @@ a {
     border: 1px solid var(--hairline-strong);
     border-radius: var(--radius);
     background: var(--surface);
-    box-shadow: 0 1px 2px rgba(23, 24, 26, 0.04), 0 12px 32px -20px rgba(23, 24, 26, 0.18);
+    box-shadow:
+        0 1px 2px rgba(23, 24, 26, 0.04),
+        0 12px 32px -20px rgba(23, 24, 26, 0.18);
     overflow: hidden;
 }
 
@@ -400,6 +402,7 @@ a {
     font-family: var(--font-body);
     font-size: 0.9rem;
     font-weight: 600;
+    white-space: nowrap;
     color: var(--muted);
     border-radius: 999px;
     cursor: pointer;
@@ -850,6 +853,155 @@ a {
 }
 
 /* ---------- Motion ---------- */
+/* ---------- Demo note ---------- */
+.panel__note {
+    margin: var(--s2) var(--s4) 0;
+    padding: var(--s2);
+    background: var(--neutral-tint);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+/* ---------- Shared section heading ---------- */
+.section-title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-optical-sizing: auto;
+    font-size: clamp(1.75rem, 3vw, 2.25rem);
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+}
+
+.section-lede {
+    margin: 0;
+    max-width: 62ch;
+    color: var(--muted);
+}
+
+/* ---------- Results ---------- */
+.results,
+.install {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s3);
+}
+
+.results__table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    overflow: hidden;
+    font-size: 0.95rem;
+}
+
+.results__table th {
+    padding: var(--s2) var(--s3);
+    text-align: left;
+    font-weight: 500;
+    font-size: 0.85rem;
+    color: var(--muted);
+    border-bottom: 1px solid var(--hairline-strong);
+}
+
+.results__table td {
+    padding: var(--s2) var(--s3);
+    border-top: 1px solid var(--hairline);
+    vertical-align: baseline;
+}
+
+/* The counts are the point; they get the display face. */
+.results__value {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.1rem;
+    white-space: nowrap;
+}
+
+.results__range {
+    color: var(--muted);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.results__foot,
+.install__foot {
+    margin: 0;
+    max-width: 70ch;
+    font-size: 0.9rem;
+    color: var(--muted);
+}
+
+.results__foot a {
+    color: var(--ink);
+}
+
+/* ---------- Install ---------- */
+.install__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s3);
+}
+
+.install__item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s1);
+    min-width: 0;
+}
+
+.install__title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.2rem;
+    letter-spacing: -0.01em;
+}
+
+.install__desc {
+    margin: 0 0 var(--s1);
+    font-size: 0.95rem;
+    color: var(--muted);
+}
+
+.code {
+    margin: 0;
+    padding: var(--s2) var(--s3);
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    line-height: 1.6;
+}
+
+@media (max-width: 720px) {
+    .install__grid {
+        grid-template-columns: 1fr;
+    }
+    .results__table th,
+    .results__table td {
+        padding-inline: var(--s2);
+    }
+}
+
+@media (max-width: 480px) {
+    .results__range {
+        display: none;
+    }
+    .panel__note {
+        margin-inline: var(--s2);
+    }
+    .segmented__btn {
+        padding-inline: 10px;
+        font-size: 0.85rem;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     html {
         scroll-behavior: auto;

@@ -1,0 +1,275 @@
+{
+  "verdict": "misaligned",
+  "summary": "The diff adds an independent `idleTimeout` alongside `maxAge`, enforces both independently of seal ttl, and sets cookie `Expires` to the earlier limit. However, it ships the half-window reseal throttle that the description explicitly says was deliberately not implemented, so the documented guarantee of exactly `idleTimeout` of inactivity becomes between `idleTimeout/2` and `idleTimeout`. It also names the payload field `lastSeenAt` instead of `updatedAt`, and adds error-response cookie staging plus a `response.ts` change that alter behavior even without `idleTimeout`, despite the 'purely additive' claim.",
+  "statedClaims": [
+    {
+      "id": "S1",
+      "text": "Adds an opt-in `idleTimeout` option as a second independent limit; `maxAge` keeps its exact previous meaning (absolute from createdAt).",
+      "status": "implemented",
+      "evidence": [
+        {
+          "file": "src/utils/session.ts",
+          "lines": "47-71"
+        },
+        {
+          "file": "src/utils/session.ts",
+          "lines": "322-339"
+        }
+      ],
+      "explanation": "The new `idleTimeout` config is added. `unsealSession` checks `maxAge` against `createdAt` and `idleTimeout` against `lastSeenAt || createdAt` independently."
+    },
+    {
+      "id": "S2",
+      "text": "With `idleTimeout` set, H3 reseals the session cookie on each request.",
+      "status": "contradicted",
+      "evidence": [
+        {
+          "file": "src/utils/session.ts",
+          "lines": "189-195"
+        },
+        {
+          "file": "src/utils/session.ts",
+          "lines": "361-395"
+        }
+      ],
+      "explanation": "`getSession` only reseals when `shouldSlide` returns true, i.e. once more than half the idle window (SLIDE_THRESHOLD = 0.5) has elapsed. Read-only requests within the first half set no cookie."
+    },
+    {
+      "id": "S3",
+      "text": "The reseal-only-past-halfway optimization was deliberately NOT implemented; the guarantee is exactly `idleTimeout` of inactivity.",
+      "status": "contradicted",
+      "evidence": [
+        {
+          "file": "src/utils/session.ts",
+          "lines": "361-395"
+        },
+        {
+          "file": "src/utils/session.ts",
+          "lines": "66-70"
+        },
+        {
+          "file": "docs/4.examples/handle-session.md",
+          "lines": "170-177"
+        },
+        {
+          "file": "test/session.test.ts",
+          "lines": "402-482"
+        }
+      ],
+      "explanation": "The diff implements exactly the half-window throttle the description rejects. The JSDoc and docs say sign-out happens 'between idleTimeout / 2 and idleTimeout'. Tests named 'throttles idleTimeout reseals to once per half window' and 'signs out an idle session between half of idleTimeout and idleTimeout' assert this behavior."
+    },
+    {
+      "id": "S4",
+      "text": "The reseal time is stamped into the sealed payload as `updatedAt`.",
+      "status": "partial",
+      "evidence": [
+        {
+          "file": "src/utils/session.ts",
+          "lines": "20-25"
+        },
+        {
+          "file": "src/utils/session.ts",
+          "lines": "267-272"
+        }
+      ],
+      "explanation": "The mechanism exists, but the field is named `lastSeenAt` rather than `updatedAt`."
+    },
+    {
+      "id": "S5",
+      "text": "Expiry is two independent checks, and cookie `Expires` is whichever limit runs out first.",
+      "status": "implemented",
+      "evidence": [
+        {
+          "file": "src/utils/session.ts",
+          "lines": "322-339"
+        },
+        {
+          "file": "src/utils/session.ts",
+          "lines": "425-437"
+        }
+      ],
+      "explanation": "`sessionExpires` returns the min of `createdAt + maxAge` and `lastSeenAt + idleTimeout`."
+    },
+    {
+      "id": "S6",
+      "text": "Without `idleTimeout`, behavior and the sealed payload are byte-for-byte unchanged (purely additive).",
+      "status": "partial",
+      "evidence": [
+        {
+          "file": "src/utils/session.ts",
+          "lines": "267-277"
+        },
+        {
+          "file": "src/utils/session.ts",
+          "lines": "247"
+        },
+        {
+          "file": "src/utils/session.ts",
+          "lines": "356"
+        },
+        {
+          "file": "src/response.ts",
+          "lines": "144-160"
+        }
+      ],
+      "explanation": "The payload and ttl are unchanged without `idleTimeout`. However, `stageSessionErrCookies` now mirrors session cookies onto error responses for all sessions, and `response.ts` clears `kEventRes` on the error path. Both are behavior changes independent of `idleTimeout`."
+    },
+    {
+      "id": "S7",
+      "text": "Expiry never depends on the seal TTL, covered by a regression test.",
+      "status": "implemented",
+      "evidence": [
+        {
+          "file": "src/utils/session.ts",
+          "lines": "322-339"
+        },
+        {
+          "file": "test/session.test.ts",
+          "lines": "330-358"
+        }
+      ],
+      "explanation": "Explicit checks run regardless of `config.seal.ttl`, and a test uses `ttl: 0`."
+    },
+    {
+      "id": "S8",
+      "text": "Only cookie sessions slide; header-carried sessions hard-expire.",
+      "status": "implemented",
+      "evidence": [
+        {
+          "file": "src/utils/session.ts",
+          "lines": "193"
+        },
+        {
+          "file": "test/session.test.ts",
+          "lines": "299-328"
+        }
+      ],
+      "explanation": "The reseal is gated on `sessionFromCookie`."
+    },
+    {
+      "id": "S9",
+      "text": "No public API change: `unsealSession` signature untouched.",
+      "status": "implemented",
+      "evidence": [
+        {
+          "file": "src/utils/session.ts",
+          "lines": "287-295"
+        }
+      ],
+      "explanation": "Only the ttl computation inside the function body changed."
+    },
+    {
+      "id": "S10",
+      "text": "The reseal is gated on unseal success, so a stale or tampered cookie does not trigger a wasted seal.",
+      "status": "implemented",
+      "evidence": [
+        {
+          "file": "src/utils/session.ts",
+          "lines": "189-195"
+        }
+      ],
+      "explanation": "The condition requires `session.id`."
+    },
+    {
+      "id": "S11",
+      "text": "JSDoc and docs state `idleTimeout` is the equivalent of `rolling`; the trade-offs (crypto cost, Set-Cookie/CDN caching, concurrent write loss) are documented.",
+      "status": "implemented",
+      "evidence": [
+        {
+          "file": "src/utils/session.ts",
+          "lines": "56-58"
+        },
+        {
+          "file": "docs/4.examples/handle-session.md",
+          "lines": "151-189"
+        }
+      ],
+      "explanation": "Present. The cost wording reflects throttled behavior rather than every-request sealing."
+    },
+    {
+      "id": "S12",
+      "text": "Tests cover sliding, exact expiry, maxAge capping with Expires flipping, header sessions, seal ttl independence, and the unchanged default.",
+      "status": "implemented",
+      "evidence": [
+        {
+          "file": "test/session.test.ts",
+          "lines": "180-400"
+        }
+      ],
+      "explanation": "All listed tests are present. Additional throttle and error-response tests are also included."
+    }
+  ],
+  "inferredClaims": [],
+  "unstatedChanges": [
+    {
+      "file": "src/utils/session.ts",
+      "description": "Half-window reseal throttle (`shouldSlide`, `SLIDE_THRESHOLD = 0.5`) that the description explicitly says was rejected, weakening the inactivity guarantee to idleTimeout/2–idleTimeout.",
+      "risk": "high"
+    },
+    {
+      "file": "src/utils/session.ts",
+      "description": "`stageSessionErrCookies` mirrors session Set-Cookie headers into `event.res.errHeaders` on every update and clear, applying session cookies to error responses even without `idleTimeout`.",
+      "risk": "medium"
+    },
+    {
+      "file": "src/response.ts",
+      "description": "Error path now clears `event[kEventRes]` before calling `errorResponse` to avoid duplicate set-cookie headers when onError re-renders. This is core response handling not mentioned in the main description.",
+      "risk": "medium"
+    },
+    {
+      "file": "src/utils/session.ts",
+      "description": "Seal ttl now falls back to `idleTimeout` when `maxAge` is unset.",
+      "risk": "low"
+    },
+    {
+      "file": "test/session.test.ts",
+      "description": "Additional tests for the throttle and for error-response cookie staging (including chunked cookies and clear-then-throw).",
+      "risk": "low"
+    }
+  ],
+  "truncated": false,
+  "signalScore": {
+    "total": 80,
+    "band": "high",
+    "components": [
+      {
+        "key": "description",
+        "label": "Description detail",
+        "max": 30,
+        "earned": 30,
+        "note": "5469 chars, 29 paragraph(s)"
+      },
+      {
+        "key": "linkedIssue",
+        "label": "Linked issue",
+        "earned": 15,
+        "max": 15,
+        "note": "#1416"
+      },
+      {
+        "key": "commits",
+        "label": "Commit quality",
+        "earned": 10,
+        "max": 20,
+        "note": "2 of 5 commit(s) substantive"
+      },
+      {
+        "key": "tests",
+        "label": "Tests touched",
+        "earned": 15,
+        "max": 15,
+        "note": "test files changed"
+      },
+      {
+        "key": "focus",
+        "label": "Scope focus",
+        "earned": 10,
+        "max": 20,
+        "note": "3 top-level directories touched"
+      }
+    ]
+  },
+  "inference": {
+    "ran": true
+  }
+}
