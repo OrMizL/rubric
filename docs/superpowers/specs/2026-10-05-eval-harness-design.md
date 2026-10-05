@@ -1,6 +1,6 @@
 # Rubric eval harness — design
 
-Status: approved design, not yet implemented. Date: 2026-10-05.
+Status: implemented (packages/eval); see plan for build order. Date: 2026-10-05.
 
 ## Why
 
@@ -43,7 +43,9 @@ packages/eval/                         (this repo, private: true, never bundled)
   src/case.ts          Zod schema for a case; load + validate
   src/diff.ts          unified-diff parse/serialize, hunk removal/insertion, count recompute
   src/mutate/*.ts      control, control_stripped, swap, scope_lie, claim_drop, smuggle
-  src/generate.ts      fetch sources, run mutators, LLM drafting with generation cache
+  src/generate.ts      stable per-source smuggle rotation and the drafting spend cap
+                       (fetching lives in cli.ts, mutators in src/mutate/, drafting in src/draft.ts)
+  src/manifest.ts      per-case content hashes and run-manifest validation
   src/review-gate.ts   interactive accept/reject/edit for LLM-drafted cases
   src/configs.ts       named EngineOptions presets
   src/pricing.ts       per-model price table for estimates and cost metrics
