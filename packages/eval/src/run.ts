@@ -64,15 +64,33 @@ export async function runEval(opts: RunOptions): Promise<RunOutcome> {
                 engineFingerprint: opts.engineFingerprint,
             });
             const hit = await readCache(opts.cacheDir, key);
-            if (hit) results.push({ ...hit, cached: true, costUsd: 0 });
-            else pending.push({ c, sampleIndex, key, estimate: 0 });
+            if (hit) {
+                // Identity comes from the job: the key ignores case id, so the stored one may be another case's.
+                results.push({
+                    ...hit,
+                    caseId: c.id,
+                    sampleIndex,
+                    config: opts.config.name,
+                    cached: true,
+                    costUsd: 0,
+                });
+            } else {
+                pending.push({ c, sampleIndex, key, estimate: 0 });
+            }
         }
     }
 
     // Estimate per case once; samples of the same case cost the same.
     const perCase = new Map<string, number>();
     for (const job of pending) {
-        if (!perCase.has(job.c.id)) perCase.set(job.c.id, await opts.estimator(job.c, opts.config));
+        if (!perCase.has(job.c.id)) {
+            const est = await opts.estimator(job.c, opts.config);
+            // NaN compares false against the cap, which would silently disable it.
+            if (!Number.isFinite(est) || est < 0) {
+                throw new Error(`estimator returned invalid cost ${est} for case "${job.c.id}"`);
+            }
+            perCase.set(job.c.id, est);
+        }
         job.estimate = perCase.get(job.c.id)!;
     }
     const estimatedUsd = pending.reduce((sum, j) => sum + j.estimate, 0);

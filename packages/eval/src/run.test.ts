@@ -130,4 +130,34 @@ describe("runEval", () => {
         await runEval(opts({ reviewer }));
         expect(reviewer).toHaveBeenCalledTimes(2);
     });
+
+    it("attributes cache hits to the requesting case, not the stored one", async () => {
+        await runEval(opts());
+        const again = await runEval(opts());
+        expect(again.results.every((r) => r.cached)).toBe(true);
+        expect(again.results.map((r) => r.caseId).sort()).toEqual(["a", "b"]);
+    });
+
+    it.each([Number.NaN, -1, Number.POSITIVE_INFINITY])(
+        "rejects a bad estimate (%s) naming the case, before any call",
+        async (bad) => {
+            const reviewer = vi.fn<Reviewer>();
+            await expect(runEval(opts({ reviewer, estimator: async () => bad }))).rejects.toThrow(
+                /"a"|\ba\b/,
+            );
+            expect(reviewer).not.toHaveBeenCalled();
+        },
+    );
+
+    it("serves a cached parse failure on rerun without calling the reviewer", async () => {
+        const failing: Reviewer = async (_c, _cfg, onCall) => {
+            onCall(call);
+            throw new Error("Review parse failed (stop_reason: max_tokens)");
+        };
+        await runEval(opts({ reviewer: failing }));
+        const reviewer = vi.fn<Reviewer>();
+        const again = await runEval(opts({ reviewer }));
+        expect(reviewer).not.toHaveBeenCalled();
+        expect(again.results.every((r) => r.cached && r.error !== null)).toBe(true);
+    });
 });

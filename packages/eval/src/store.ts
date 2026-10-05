@@ -19,7 +19,8 @@ export async function readJson<T>(path: string): Promise<T> {
 /** tmp + rename, so a crash mid-write never leaves a half-written file behind. */
 export async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
     await mkdir(dirname(path), { recursive: true });
-    const tmp = `${path}.${process.pid}.${randomUUID()}.tmp`; // unique per write: concurrent runner workers can hit one key
+    // Unique per write: concurrent runner workers can hit one key.
+    const tmp = `${path}.${process.pid}.${randomUUID()}.tmp`;
     await writeFile(tmp, JSON.stringify(value, null, 2) + "\n");
     await rename(tmp, path);
 }
