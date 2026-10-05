@@ -11,7 +11,8 @@ export interface EvalConfig {
 export const CONFIGS: Record<string, EvalConfig> = {
     default: { name: "default", model: DEFAULT_MODEL, infer: true },
     "no-infer": { name: "no-infer", model: DEFAULT_MODEL, infer: false },
-    "opus-5-5": { name: "opus-5-5", model: "claude-opus-5-5", infer: true },
+    // The previous production default, kept to measure the model switch.
+    "opus-4-8": { name: "opus-4-8", model: "claude-opus-4-8", infer: true },
     "sonnet-5-5": { name: "sonnet-5-5", model: "claude-sonnet-5-5", infer: true },
     // Small enough that most real PRs truncate, to measure what truncation costs.
     "budget-8k": { name: "budget-8k", model: DEFAULT_MODEL, infer: true, maxDiffTokens: 8_000 },
