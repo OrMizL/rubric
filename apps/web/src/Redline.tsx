@@ -18,7 +18,7 @@ interface Wire {
  * fixed graphic, so it always lands on the exact struck phrase and the exact code line, at any
  * width. Side by side it bridges the gutter; stacked it runs down the left margin.
  */
-export function Redline({ play = true }: { play?: boolean }) {
+export function Redline({ play = true, replay = 0 }: { play?: boolean; replay?: number }) {
     const stageRef = useRef<HTMLDivElement>(null);
     const strikeRef = useRef<HTMLSpanElement>(null);
     const descRef = useRef<HTMLElement>(null);
@@ -26,6 +26,7 @@ export function Redline({ play = true }: { play?: boolean }) {
     const targetRef = useRef<HTMLSpanElement>(null);
     const [wire, setWire] = useState<Wire | null>(null);
     const [drawn, setDrawn] = useState(false);
+    const [resetting, setResetting] = useState(false);
 
     useLayoutEffect(() => {
         const stage = stageRef.current;
@@ -72,12 +73,33 @@ export function Redline({ play = true }: { play?: boolean }) {
 
     useEffect(() => {
         if (!play) return;
-        const timer = window.setTimeout(() => setDrawn(true), 250);
-        return () => window.clearTimeout(timer);
-    }, [play]);
+        // Let the eye land on the page first; on a replay, snap back without the reverse
+        // transition before drawing again.
+        let timer = 0;
+        let frame = 0;
+        if (replay === 0) {
+            timer = window.setTimeout(() => setDrawn(true), 700);
+        } else {
+            setResetting(true);
+            setDrawn(false);
+            frame = requestAnimationFrame(() =>
+                requestAnimationFrame(() => {
+                    setResetting(false);
+                    timer = window.setTimeout(() => setDrawn(true), 150);
+                }),
+            );
+        }
+        return () => {
+            window.clearTimeout(timer);
+            cancelAnimationFrame(frame);
+        };
+    }, [play, replay]);
 
     return (
-        <div ref={stageRef} className={drawn ? "redline redline--drawn" : "redline"}>
+        <div
+            ref={stageRef}
+            className={`redline${drawn ? " redline--drawn" : ""}${resetting ? " redline--reset" : ""}`}
+        >
             <figure ref={descRef} className="doc doc--desc">
                 <figcaption className="doc__tag">
                     The description,{" "}

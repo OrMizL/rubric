@@ -337,6 +337,30 @@ main > section,
     color: var(--white);
 }
 
+.catch__replay {
+    margin-left: 16px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--red-text);
+    font: inherit;
+    text-decoration: underline;
+    text-decoration-color: rgba(255, 138, 112, 0.4);
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+
+.catch__replay:hover {
+    text-decoration-color: currentColor;
+}
+
+/* A replay snaps back to the undrawn state instead of animating the redline in reverse. */
+.redline--reset *,
+.redline--reset *::before,
+.redline--reset *::after {
+    transition: none !important;
+}
+
 /* ---------- Sections ---------- */
 
 .section {
@@ -670,11 +694,39 @@ main > section,
     align-items: start;
 }
 
-.install__term {
+.install + .install {
+    margin-top: 56px;
+}
+
+.install__media {
     margin: 0;
 }
 
-.install__term figcaption {
+.install__video {
+    display: block;
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--line);
+    background: var(--blue-deep);
+}
+
+.install__media figcaption a {
+    color: var(--white);
+}
+
+.install__snippets p {
+    margin: 0 0 14px;
+    color: var(--soft);
+    font-size: 15px;
+}
+
+.install__snippets p code {
+    white-space: nowrap;
+    color: var(--white);
+    font-size: 0.9em;
+}
+
+.install__media figcaption {
     margin-top: 10px;
     color: var(--soft);
     font-size: 14px;
@@ -684,10 +736,6 @@ main > section,
     margin: 0 0 10px;
     font-size: 16px;
     font-weight: 600;
-}
-
-.install__snippets h3 + .code {
-    margin-bottom: 28px;
 }
 
 .code {

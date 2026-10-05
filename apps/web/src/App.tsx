@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import { Redline } from "./Redline";
 import { ReviewLedger } from "./ReviewLedger";
 import { TerminalReplay } from "./TerminalReplay";
@@ -64,6 +66,8 @@ function Wordmark() {
 const contradicted = realCatchReview.statedClaims.filter((c) => c.status === "contradicted").length;
 
 export function App() {
+    const [replay, setReplay] = useState(0);
+
     return (
         <div className="site">
             <header className="nav">
@@ -89,7 +93,7 @@ export function App() {
                 </section>
 
                 <section className="catch" aria-label="A real catch">
-                    <Redline />
+                    <Redline replay={replay} />
                     <dl className="facts">
                         <div>
                             <dt>Verdict</dt>
@@ -111,6 +115,13 @@ export function App() {
                     <p className="catch__caption">
                         A merged pull request, reviewed as it was merged. The design changed during
                         review; the description didn&apos;t. <a href="#review">Read the review</a>
+                        <button
+                            type="button"
+                            className="catch__replay"
+                            onClick={() => setReplay((r) => r + 1)}
+                        >
+                            Replay
+                        </button>
                     </p>
                 </section>
 
@@ -172,7 +183,7 @@ export function App() {
                         </p>
                     </div>
                     <div className="install">
-                        <figure className="install__term">
+                        <figure className="install__media">
                             <TerminalReplay />
                             <figcaption>
                                 A real run, recorded October 5, 2026. Waits are sped up; it took{" "}
@@ -181,10 +192,40 @@ export function App() {
                         </figure>
                         <div className="install__snippets">
                             <h3>On any pull request</h3>
+                            <p>
+                                The command line tool only reads, so it works on repositories you
+                                don&apos;t own.
+                            </p>
                             <pre className="code">
                                 <code>{CLI_SNIPPET}</code>
                             </pre>
+                        </div>
+                    </div>
+                    <div className="install">
+                        <figure className="install__media">
+                            <video
+                                className="install__video"
+                                src="/github-comment.mp4"
+                                poster="/github-comment.jpg"
+                                autoPlay
+                                muted
+                                loop
+                                playsInline
+                                preload="metadata"
+                                aria-label="Pull request #2 on GitHub: the description says documentation-only, and Rubric's comment below it says Misaligned."
+                            />
+                            <figcaption>
+                                This repository&apos;s trap pull request{" "}
+                                <a href={`${GITHUB_URL}/pull/2`}>#2</a>: a code change described as
+                                docs-only, and the comment Rubric left on it.
+                            </figcaption>
+                        </figure>
+                        <div className="install__snippets">
                             <h3>On every pull request in your repository</h3>
+                            <p>
+                                The GitHub Action writes the review to the job summary. Add{" "}
+                                <code>comment: true</code> to post it on the pull request instead.
+                            </p>
                             <pre className="code">
                                 <code>{ACTION_SNIPPET}</code>
                             </pre>
