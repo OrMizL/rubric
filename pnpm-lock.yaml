@@ -94,6 +94,21 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
 
+  packages/eval:
+    dependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^0.110.0
+        version: 0.110.0(zod@4.4.3)
+      '@octokit/rest':
+        specifier: ^22.0.1
+        version: 22.0.1
+      '@rubric/core':
+        specifier: workspace:*
+        version: link:../core
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+
 packages:
 
   '@actions/core@3.0.1':
