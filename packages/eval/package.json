@@ -1,0 +1,17 @@
+{
+  "name": "@rubric/eval",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "cli": "tsx src/cli.ts",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
+    "@octokit/rest": "^22.0.1",
+    "@rubric/core": "workspace:*",
+    "zod": "^4.4.3"
+  }
+}

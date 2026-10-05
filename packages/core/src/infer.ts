@@ -3,6 +3,18 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import type { ReviewContext } from "./context.js";
 
+/**
+ * One paid model call, as reported to an observer. Facts only: the hook exists so
+ * an eval harness can measure cost and latency without the engine changing behavior.
+ */
+export interface EngineCall {
+    stage: "infer" | "review";
+    model: string;
+    usage: Anthropic.Usage;
+    /** Wall-clock milliseconds for this one call. */
+    ms: number;
+}
+
 /** One expected behavior derived from PR context, before any code is seen. */
 export const SpecItemSchema = z.object({
     text: z.string().describe("A single expected behavior, stated concretely"),
@@ -22,6 +34,8 @@ export interface InferOptions {
     client: Anthropic;
     model: string;
     maxOutputTokens?: number;
+    /** Observer for the paid call. Invoked even when the parse fails, since it was still billed. */
+    onCall?: (call: EngineCall) => void;
 }
 
 export const DEFAULT_INFER_MAX_OUTPUT_TOKENS = 4_000;
@@ -89,6 +103,7 @@ export function buildInferUserPrompt(ctx: ReviewContext): string {
 
 /** Run the diff-blind inference call. Throws on parse failure; the engine degrades. */
 export async function inferSpec(ctx: ReviewContext, opts: InferOptions): Promise<ImpliedSpec> {
+    const started = Date.now();
     const response = await opts.client.messages.parse({
         model: opts.model,
         max_tokens: opts.maxOutputTokens ?? DEFAULT_INFER_MAX_OUTPUT_TOKENS,
@@ -96,6 +111,12 @@ export async function inferSpec(ctx: ReviewContext, opts: InferOptions): Promise
         system: buildInferSystemPrompt(),
         messages: [{ role: "user", content: buildInferUserPrompt(ctx) }],
         output_config: { format: zodOutputFormat(ImpliedSpecSchema) },
+    });
+    opts.onCall?.({
+        stage: "infer",
+        model: opts.model,
+        usage: response.usage,
+        ms: Date.now() - started,
     });
 
     if (!response.parsed_output) {

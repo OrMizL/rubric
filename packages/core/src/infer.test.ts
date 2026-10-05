@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildInferSystemPrompt, buildInferUserPrompt } from "./infer.js";
+import { buildInferSystemPrompt, buildInferUserPrompt, inferSpec } from "./infer.js";
+import type { EngineCall } from "./infer.js";
 import type { ReviewContext } from "./context.js";
 
 const ctx: ReviewContext = {
@@ -43,5 +44,48 @@ describe("buildInferSystemPrompt", () => {
     it("tells the model it cannot see the code", () => {
         const system = buildInferSystemPrompt();
         expect(system.toLowerCase()).toContain("you will not see the code");
+    });
+});
+
+describe("inferSpec onCall", () => {
+    it("reports stage, model, usage, and timing for the infer call", async () => {
+        const usage = { input_tokens: 120, output_tokens: 45 };
+        const client = {
+            messages: {
+                parse: async () => ({
+                    parsed_output: { items: [] },
+                    stop_reason: "end_turn",
+                    usage,
+                }),
+            },
+        };
+        const calls: EngineCall[] = [];
+        await inferSpec(ctx, {
+            client: client as never,
+            model: "claude-test",
+            onCall: (c) => calls.push(c),
+        });
+        expect(calls).toHaveLength(1);
+        expect(calls[0]!.stage).toBe("infer");
+        expect(calls[0]!.model).toBe("claude-test");
+        expect(calls[0]!.usage).toEqual(usage);
+        expect(calls[0]!.ms).toBeGreaterThanOrEqual(0);
+    });
+
+    it("still reports the call when the parse fails", async () => {
+        const client = {
+            messages: {
+                parse: async () => ({
+                    parsed_output: null,
+                    stop_reason: "max_tokens",
+                    usage: { input_tokens: 1, output_tokens: 4000 },
+                }),
+            },
+        };
+        const calls: EngineCall[] = [];
+        await expect(
+            inferSpec(ctx, { client: client as never, model: "m", onCall: (c) => calls.push(c) }),
+        ).rejects.toThrow(/parse failed/);
+        expect(calls).toHaveLength(1);
     });
 });

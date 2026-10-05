@@ -73,4 +73,5 @@ export {
     type SpecItem,
     type ImpliedSpec,
     type InferOptions,
+    type EngineCall,
 } from "./infer.js";

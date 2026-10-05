@@ -10,6 +10,7 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
+    "eval": "pnpm --filter @rubric/eval cli",
     "format": "prettier --write \"**/*.{ts,tsx,js,cjs,mjs,json,yml,yaml,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,cjs,mjs,json,yml,yaml,md}\""
   },
