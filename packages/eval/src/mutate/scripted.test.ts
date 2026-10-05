@@ -9,6 +9,7 @@ import {
 } from "./scripted.js";
 import { makeCase } from "../fixtures.js";
 import { validateCase } from "../case.js";
+import { matchesKeywords } from "../score.js";
 
 function pr(owner: string, repo: string, title: string) {
     const base = makeCase().input;
@@ -18,6 +19,7 @@ function pr(owner: string, repo: string, title: string) {
         repo,
         title,
         body: `${title} body`,
+        headRef: `branch-${title}`,
         labels: ["enhancement"],
         commits: [{ sha: "1", message: `commit for ${title}` }],
         linkedIssue: { number: 9, title: `issue ${title}`, body: "" },
@@ -55,6 +57,7 @@ describe("swap", () => {
         expect(c.input.linkedIssue).toEqual(donor.linkedIssue);
         expect(c.input.commits).toEqual([]);
         expect(c.input.labels).toEqual([]);
+        expect(c.input.headRef).toBe(donor.headRef);
         expect(c.input.files).toEqual(source.files);
         expect(c.label).toEqual({ verdict: { oneOf: ["misaligned"] } });
     });
@@ -68,6 +71,17 @@ describe("scopeLie", () => {
         expect(c.label.claims).toEqual([
             { keywords: SCOPE_LIE_PHRASES[0]!.keywords, status: ["contradicted"] },
         ]);
+    });
+});
+
+describe("SCOPE_LIE_PHRASES", () => {
+    it("keywords match their own phrase but not an unrelated refactor claim", () => {
+        for (const phrase of SCOPE_LIE_PHRASES) {
+            expect(matchesKeywords(phrase.text, phrase.keywords)).toBe(true);
+            expect(
+                matchesKeywords("Refactors the parser into smaller modules", phrase.keywords),
+            ).toBe(false);
+        }
     });
 });
 

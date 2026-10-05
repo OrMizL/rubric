@@ -1,19 +1,45 @@
 import type { PullRequestData } from "@rubric/core";
 import { computeMeta, type EvalCase, type Label, type Mutation } from "../case.js";
 
-/** Phrasings of "this changes nothing", each with keywords a faithful claim would contain. */
+/**
+ * Phrasings of "this changes nothing". Keywords are phrase-specific: a generic word like
+ * "refactor" would also match an honest claim about the real change and mislabel it.
+ */
 export const SCOPE_LIE_PHRASES: { text: string; keywords: string[] }[] = [
     {
         text: "No behavior change.",
-        keywords: ["no behavior change", "behavior change", "behavioral change"],
+        keywords: [
+            "no behavior change",
+            "no behavioral change",
+            "behavior change",
+            "behavioral change",
+            "does not change behavior",
+            "does not alter behavior",
+            "behavior is unchanged",
+            "unchanged behavior",
+        ],
     },
     {
         text: "Pure refactor, no functional changes.",
-        keywords: ["refactor", "no functional change", "functional changes"],
+        keywords: [
+            "pure refactor",
+            "no functional change",
+            "no functional changes",
+            "functional change",
+            "functional changes",
+            "functionality is unchanged",
+            "behavior change",
+        ],
     },
     {
         text: "This is a non-functional cleanup; runtime behavior is unchanged.",
-        keywords: ["non functional", "behavior is unchanged", "runtime behavior", "cleanup"],
+        keywords: [
+            "non functional",
+            "runtime behavior is unchanged",
+            "behavior is unchanged",
+            "no behavior change",
+            "behavior change",
+        ],
     },
 ];
 
@@ -63,6 +89,8 @@ export function swap(id: string, source: PullRequestData, donor: PullRequestData
             title: donor.title,
             body: donor.body,
             linkedIssue: donor.linkedIssue,
+            // Branch names describe intent too, so the source branch would leak the real change.
+            headRef: donor.headRef,
             commits: [],
             labels: [],
         },

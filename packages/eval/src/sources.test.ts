@@ -17,6 +17,12 @@ describe("parseSourceList", () => {
     });
 });
 
+describe("parseSourceList duplicates", () => {
+    it("rejects a duplicate ref with its line number", () => {
+        expect(() => parseSourceList("a/b#1\nc/d#2\na/b#1")).toThrow(/line 3/);
+    });
+});
+
 describe("sourceId", () => {
     it("is filesystem-safe", () => {
         expect(sourceId({ owner: "a", repo: "b.js", number: 3 })).toBe("a__b.js__3");

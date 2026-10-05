@@ -11,12 +11,17 @@ const TS_JS_RE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
 
 export function parseSourceList(text: string): SourceRef[] {
     const refs: SourceRef[] = [];
+    const seen = new Set<string>();
     text.split("\n").forEach((raw, i) => {
         const line = raw.trim();
         if (line === "" || line.startsWith("#")) return;
         const m = REF_RE.exec(line);
         if (!m)
             throw new Error(`sources.txt line ${i + 1}: expected owner/repo#123, got "${line}"`);
+        // A repeated ref would generate duplicate case ids and double-weight one PR.
+        const key = `${m[1]}/${m[2]}#${m[3]}`.toLowerCase();
+        if (seen.has(key)) throw new Error(`sources.txt line ${i + 1}: duplicate ref "${line}"`);
+        seen.add(key);
         refs.push({ owner: m[1]!, repo: m[2]!, number: Number(m[3]) });
     });
     return refs;
