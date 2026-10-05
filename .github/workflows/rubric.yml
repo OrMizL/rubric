@@ -15,11 +15,11 @@ jobs:
   review:
     runs-on: ubuntu-latest
     steps:
-      # Check out the repo so we can run the action from its local path,
+      # Check out the repo so we can run the action from its root action.yml,
       # which dogfoods the exact code on this branch.
       - uses: actions/checkout@v4
 
-      - uses: ./packages/action
+      - uses: ./
         with:
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           comment: true

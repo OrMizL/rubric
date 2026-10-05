@@ -24,7 +24,7 @@ Per-package / single test:
 pnpm --filter @rubric/core test
 pnpm --filter @rubric/core exec vitest run src/budget.test.ts
 pnpm --filter @rubric/core exec vitest run -t "drops lockfiles"
-pnpm --filter @rubric/cli build && node packages/cli/dist/rubric.cjs scan owner/repo#123
+pnpm --filter @ormizl/rubric build && node packages/cli/dist/rubric.cjs scan owner/repo#123
 pnpm --filter @rubric/web dev                        # static demo, no API calls
 ```
 
@@ -111,7 +111,8 @@ Consumers: `packages/action/src/main.ts` (job summary always; PR comment opt-in)
 - **Real token counts only.** Budgeting uses `client.messages.countTokens`, never a chars÷4 heuristic. Only `show-prompt.ts` estimates, and only for display.
 - **Once omission starts, everything after is omitted** in `truncateToBudget`, so a small low-rank file can't leapfrog a large higher-rank one.
 - **Single idempotent comment.** `upsertComment` finds the existing comment by the hidden `<!-- rubric-review -->` marker that `reviewToMarkdown` emits. Re-running must never spam a PR. Any renderer change must keep emitting the marker first.
-- **`comment: false` by default.** The Action is report-only; the CLI never writes at all. Respect for repos you don't own is a design position, not an oversight.
+- **`comment: false` by default.** The Action is report-only; the CLI never writes at all. The CLI is published to npm as `@ormizl/rubric`; it bundles core, so core stays a devDependency. Respect for repos you don't own is a design position, not an oversight.
+- **The Action is defined by the root `action.yml`** (Marketplace requires it there), which runs `packages/action/dist/index.cjs`. Users pin `OrMizL/rubric@v1`; the dogfood workflow uses `./`.
 - **`packages/action/dist/index.cjs` is committed** (force-added past the gitignored `dist/`) — GitHub Actions runs it with no install step. Rebuild and commit it whenever `packages/action` or `packages/core` changes, or the Action ships stale code. Both action and CLI bundle with `noExternal: [/./]`.
 - **Inference never sees patches.** `ReviewContext.fileSummary` structurally cannot carry one, and `infer.test.ts` asserts the assembled prompt has no `@@` hunks. Do not add a patch field to reach it "just this once."
 - **`onCall` reports, never steers.** `EngineOptions.onCall` exists so `packages/eval` can
@@ -128,7 +129,7 @@ Consumers: `packages/action/src/main.ts` (job summary always; PR comment opt-in)
 - `strict` + `noUncheckedIndexedAccess` — indexed access is `T | undefined`; expect `!` or explicit guards in parsers.
 - Relative imports carry the `.js` extension (ESM + `moduleResolution: bundler`).
 - Comments explain _why_ a rule exists (see `budget.ts`, tsup configs), not what the line does. Match that density.
-- Default model id lives in three places that must stay in sync: `DEFAULT_MODEL` in `engine.ts`, the `model` default in `packages/action/action.yml`, and the fallback in `packages/action/src/main.ts`.
+- Default model id lives in three places that must stay in sync: `DEFAULT_MODEL` in `engine.ts`, the `model` default in the root `action.yml`, and the fallback in `packages/action/src/main.ts`.
 - `apps/web` imports review fixtures by relative path from `packages/core/src/__fixtures__/`. Renaming those files breaks the web build.
 
 ## Dogfooding

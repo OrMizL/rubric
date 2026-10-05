@@ -1,7 +1,23 @@
 {
-  "name": "@rubric/cli",
-  "version": "0.0.0",
-  "private": true,
+  "name": "@ormizl/rubric",
+  "version": "0.1.0",
+  "description": "Check whether a pull request's code matches what its description claims. Read-only CLI for any GitHub PR.",
+  "license": "MIT",
+  "author": "Or Mizrahi",
+  "homepage": "https://rubric.ormiz.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OrMizL/rubric.git",
+    "directory": "packages/cli"
+  },
+  "bugs": "https://github.com/OrMizL/rubric/issues",
+  "keywords": [
+    "code-review",
+    "pull-request",
+    "github",
+    "claude",
+    "cli"
+  ],
   "type": "module",
   "bin": {
     "rubric": "./dist/rubric.cjs"
@@ -9,13 +25,20 @@
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "tsx src/main.ts",
     "build": "tsup",
+    "prepublishOnly": "pnpm build",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
+  "devDependencies": {
     "@rubric/core": "workspace:*"
   }
 }

@@ -105,7 +105,7 @@ jobs:
   review:
     runs-on: ubuntu-latest
     steps:
-      - uses: OrMizL/rubric/packages/action@main
+      - uses: OrMizL/rubric@v1
         with:
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           comment: true # opt in to PR comments; default is report-only
@@ -125,16 +125,26 @@ By default the Action is **report-only** — it writes the review to the workflo
 job summary and never comments unless you set `comment: true`. Outputs `verdict`,
 `misaligned`, and `signal-score` let later steps branch on the result.
 
+**Pull requests from forks.** GitHub withholds repository secrets from
+`pull_request` workflows triggered by forks, so on an open-source repo the Action
+fails for outside contributors (no API key). Rubric reads the PR through the API
+and never checks out or runs PR code, so it can run under `pull_request_target`
+instead, which has secrets. Keep it that way: do not add a step that checks out
+and executes the fork's code in the same workflow. Every PR you review spends your
+API credits, so consider restricting which PRs it runs on (for example by label or
+author association).
+
 ### As a CLI — scan _any_ PR, read-only, from your terminal
 
 The CLI never writes to the PR, so it works on repositories you don't own.
 
 ```bash
-pnpm install && pnpm --filter @rubric/cli build
-
 export ANTHROPIC_API_KEY=sk-ant-...
-node packages/cli/dist/rubric.cjs scan sindresorhus/slugify#73
+npx @ormizl/rubric scan sindresorhus/slugify#73
 ```
+
+Requires Node 20+. From a clone: `pnpm install && pnpm --filter @ormizl/rubric build`, then
+`node packages/cli/dist/rubric.cjs scan …`.
 
 Accepts a PR URL or `owner/repo#123`. Useful flags: `--json`, `--markdown`,
 `--no-infer`, `--show-inferred-spec`, `--model`, `--fail-on-misaligned` (exit
@@ -225,3 +235,9 @@ Built as a pnpm workspace. `pnpm -r build && pnpm -r typecheck && pnpm -r test`.
 > **Note:** CI order must be `build → typecheck → test` — typechecking fresher
 > clones fails without a built `dist/` because `packages/action` and
 > `packages/cli` depend on `@rubric/core`'s compiled declarations.
+
+---
+
+## License
+
+[MIT](LICENSE)
