@@ -1,6 +1,6 @@
 import { filterFiles, rankFiles, type PullRequestData } from "@rubric/core";
 import { computeMeta, type EvalCase } from "../case.js";
-import { appendHunk, hunkId, parsePatch, removeHunks } from "../diff.js";
+import { hunkId, insertIntoHunk, parsePatch, removeHunks } from "../diff.js";
 import type { SmuggleTemplate } from "../templates.js";
 
 export interface ClaimDropDraft {
@@ -13,6 +13,10 @@ export interface ClaimDropDraft {
 export interface SmuggleDraft {
     lines: string[];
     description: string;
+    /** Hunk index in the target file's patch to insert into. */
+    hunk: number;
+    /** Body line index within that hunk; the lines go right after it. */
+    afterLine: number;
 }
 
 const TS_JS_RE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
@@ -82,9 +86,16 @@ export function smuggle(
     if (!source.files.some((f) => f.filename === targetFile)) {
         throw new Error(`${id}: target ${targetFile} not in diff`);
     }
-    const files = source.files.map((f) =>
-        f.filename === targetFile ? appendHunk(f, draft.lines) : f,
-    );
+    let files;
+    try {
+        files = source.files.map((f) =>
+            f.filename === targetFile
+                ? insertIntoHunk(f, draft.hunk, draft.afterLine, draft.lines)
+                : f,
+        );
+    } catch (err) {
+        throw new Error(`${id}: ${err instanceof Error ? err.message : String(err)}`);
+    }
     const input = { ...source, files };
     return {
         id: `${id}.smuggle.${template.id}`,
@@ -105,7 +116,8 @@ export function smuggle(
 /** Highest-ranked TS/JS source file with a patch: where a real smuggle would hide. */
 export function pickSmuggleTarget(source: PullRequestData): string | null {
     const ranked = rankFiles(filterFiles(source.files));
-    // appendHunk refuses a patch ending in a no-newline marker, so such a file can't host one.
+    // Skip patches ending in a no-newline marker: insertIntoHunk refuses anchors beside it,
+    // and steering the model away from such files avoids drafts that fail on insert.
     const appendable = (patch: string) => {
         const last = patch.trimEnd().split("\n").pop() ?? "";
         return !last.startsWith("\\");

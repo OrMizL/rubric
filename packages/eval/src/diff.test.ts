@@ -3,6 +3,7 @@ import type { ChangedFile } from "@rubric/core";
 import {
     appendHunk,
     countChanges,
+    insertIntoHunk,
     hunkId,
     parsePatch,
     removeHunks,
@@ -133,5 +134,45 @@ describe("appendHunk", () => {
 
     it("refuses an empty append", () => {
         expect(() => appendHunk(file(TWO_HUNKS), [])).toThrow(/nothing to append/);
+    });
+});
+
+describe("insertIntoHunk", () => {
+    it("inserts lines after a body line and shifts later hunks", () => {
+        // After " one" (index 0) in hunk 0.
+        const out = insertIntoHunk(file(TWO_HUNKS), 0, 0, ["track();"]);
+        const hunks = parsePatch(out.patch!);
+        expect(hunks[0]).toMatchObject({ oldStart: 1, oldLines: 3, newStart: 1, newLines: 5 });
+        expect(hunks[0]!.lines).toEqual([" one", "+track();", "+two", " three", " four"]);
+        expect(hunks[1]).toMatchObject({ oldStart: 10, newStart: 12, newLines: 3 });
+        expect(out.additions).toBe(4);
+    });
+
+    it("can insert into the last hunk without touching earlier ones", () => {
+        const out = insertIntoHunk(file(TWO_HUNKS), 1, 3, ["a();", "b();"]);
+        const hunks = parsePatch(out.patch!);
+        expect(hunks[0]).toMatchObject({ newStart: 1, newLines: 4 });
+        expect(hunks[1]).toMatchObject({ newStart: 11, newLines: 5 });
+        expect(hunks[1]!.lines.slice(-2)).toEqual(["+a();", "+b();"]);
+    });
+
+    it("rejects out-of-range hunks and lines", () => {
+        expect(() => insertIntoHunk(file(TWO_HUNKS), 2, 0, ["x"])).toThrow(/hunk 2/);
+        expect(() => insertIntoHunk(file(TWO_HUNKS), 0, 4, ["x"])).toThrow(/line 4/);
+        expect(() => insertIntoHunk(file(TWO_HUNKS), 0, -1, ["x"])).toThrow(/line -1/);
+    });
+
+    it("refuses to split a line from its no-newline marker", () => {
+        const marker = "@@ -1 +1,2 @@\n a\n+b\n\\ No newline at end of file";
+        expect(() => insertIntoHunk(file(marker), 0, 1, ["x"])).toThrow(/no newline/i);
+        expect(() => insertIntoHunk(file(marker), 0, 2, ["x"])).toThrow(/no newline/i);
+        expect(insertIntoHunk(file(marker), 0, 0, ["x"]).additions).toBe(2);
+    });
+
+    it("refuses empty input and patchless files", () => {
+        expect(() => insertIntoHunk(file(TWO_HUNKS), 0, 0, [])).toThrow(/nothing to insert/);
+        expect(() => insertIntoHunk({ ...file(TWO_HUNKS), patch: undefined }, 0, 0, ["x"])).toThrow(
+            /no patch/,
+        );
     });
 });

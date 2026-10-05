@@ -42,7 +42,7 @@ import {
 import { claimDrop, pickSmuggleTarget, smuggle } from "./mutate/drafted.js";
 import { engineFingerprint } from "./cache.js";
 import { DRAFT_MODEL, cachedDrafter, claudeDrafter } from "./draft.js";
-import { reachedCap, smuggleRotation } from "./generate.js";
+import { acceptedMutations, reachedCap, smuggleRotation } from "./generate.js";
 import { checkCaseHashes, hashCases, validateManifest } from "./manifest.js";
 import { costUsd } from "./pricing.js";
 import { reviewDrafts } from "./review-gate.js";
@@ -244,33 +244,39 @@ async function main(): Promise<void> {
                         `${what}: $${(spent - before).toFixed(3)} (total $${spent.toFixed(3)} of $${maxUsd})`,
                     );
 
+                const caseIds = await listCaseIds(dir);
                 for (const { key, pr } of sources.slice(0, limit)) {
+                    const accepted = acceptedMutations(caseIds, key);
+                    if (accepted.claimDrop && accepted.smuggle) continue;
                     if (reachedCap(spent, maxUsd)) {
                         console.log(
                             `stopped before ${key}: spent $${spent.toFixed(3)} reached --max-usd ${maxUsd}`,
                         );
                         break;
                     }
-                    const claimBefore = spent;
-                    try {
-                        const cd = await drafter.claimDrop(pr);
-                        if (cd.draft.applicable) {
-                            const c = claimDrop(key, pr, cd.draft, {
-                                model: DRAFT_MODEL,
-                                promptHash: cd.promptHash,
-                            });
-                            await writeJsonAtomic(join(dir, "drafts", `${c.id}.json`), {
-                                case: c,
-                                sourceId: key,
-                            });
-                            console.log(`drafted ${c.id}`);
+                    if (!accepted.claimDrop) {
+                        const claimBefore = spent;
+                        try {
+                            const cd = await drafter.claimDrop(pr);
+                            if (cd.draft.applicable) {
+                                const c = claimDrop(key, pr, cd.draft, {
+                                    model: DRAFT_MODEL,
+                                    promptHash: cd.promptHash,
+                                });
+                                await writeJsonAtomic(join(dir, "drafts", `${c.id}.json`), {
+                                    case: c,
+                                    sourceId: key,
+                                });
+                                console.log(`drafted ${c.id}`);
+                            }
+                        } catch (err) {
+                            console.error(
+                                `claim_drop ${key}: ${err instanceof Error ? err.message : err}`,
+                            );
                         }
-                    } catch (err) {
-                        console.error(
-                            `claim_drop ${key}: ${err instanceof Error ? err.message : err}`,
-                        );
+                        report(`claim_drop ${key}`, claimBefore);
                     }
-                    report(`claim_drop ${key}`, claimBefore);
+                    if (accepted.smuggle) continue;
                     const target = pickSmuggleTarget(pr);
                     if (!target) continue;
                     const { template, size } = smuggleRotation(key);

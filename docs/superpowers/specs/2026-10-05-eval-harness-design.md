@@ -133,9 +133,12 @@ least one sentence; 2–30 files; no file with a GitHub-omitted patch.
   hunks, recomputes `additions`/`deletions`, and drops files whose patch becomes empty. Partial-hunk
   edits are never made, so hunk headers stay valid.
 - `smuggle` — choose a template (~6: `disable-check`, `widen-auth`, `telemetry-call`,
-  `skip-validation`, ...) and a target file in the diff. Claude adapts the template into a hunk in
-  that file's style; code inserts it as a new hunk at a valid position and updates counts.
-  `smuggleLines` is recorded. Templates are additions-only (we hold patches, not full files); the hunk is appended after the file's last hunk.
+  `skip-validation`, ...) and a target file in the diff. Claude sees the file's hunks with
+  numbered lines, writes the change in that file's style, and picks an anchor inside existing code;
+  code inserts the lines there and updates counts. `smuggleLines` is recorded. Templates are
+  additions-only (we hold patches, not full files). The first version appended a new hunk after the
+  file's last hunk, which often produced helpers nothing called; in review, 20 of 29 smuggles were
+  rejected as dead code, so insertion moved inside existing hunks.
 
 LLM drafting calls are cached in `generation-cache/` keyed by (template, source, prompt hash), so
 regeneration is free.
