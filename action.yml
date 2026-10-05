@@ -1,4 +1,4 @@
-name: Rubric
+name: Rubric Intent Check
 author: Or Mizrahi
 description: AI review of spec vs. implementation alignment on pull requests
 inputs:
