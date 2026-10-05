@@ -1,4 +1,5 @@
 name: Rubric
+author: Or Mizrahi
 description: AI review of spec vs. implementation alignment on pull requests
 inputs:
   anthropic-api-key:
@@ -41,4 +42,7 @@ outputs:
     description: How much intent signal the PR carried, 0-100.
 runs:
   using: node24
-  main: dist/index.cjs
+  main: packages/action/dist/index.cjs
+branding:
+  icon: check-square
+  color: purple
