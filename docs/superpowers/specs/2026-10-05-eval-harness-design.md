@@ -101,15 +101,15 @@ in the existing build → typecheck → test order.
 
 Labels per mutation:
 
-| Mutation           | Label                                                                           |
-| ------------------ | ------------------------------------------------------------------------------- |
-| `control`          | `verdict.not: ["misaligned"]`                                                   |
-| `control_stripped` | `verdict.not: ["misaligned"]`                                                   |
-| `swap`             | `verdict.oneOf: ["misaligned"]`; donor description's claims as `missing`        |
-| `claim_drop`       | dropped claim's keywords, status `missing` or `partial`                         |
-| `smuggle`          | `unstated: [{ file, minRisk: "medium" }]`                                       |
-| `scope_lie`        | `claims: [{ keywords: ["no behavior change", ...], status: ["contradicted"] }]` |
-| `real`             | hand-written; lists _all_ expected claims so precision is meaningful            |
+| Mutation           | Label                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------- |
+| `control`          | `verdict.not: ["misaligned"]`                                                                     |
+| `control_stripped` | `verdict.not: ["misaligned"]`                                                                     |
+| `swap`             | `verdict.oneOf: ["misaligned"]` (verdict-only; donor claim keywords are not derived mechanically) |
+| `claim_drop`       | dropped claim's keywords, status `missing` or `partial`                                           |
+| `smuggle`          | `unstated: [{ file, minRisk: "medium" }]`                                                         |
+| `scope_lie`        | `claims: [{ keywords: ["no behavior change", ...], status: ["contradicted"] }]`                   |
+| `real`             | hand-written; lists _all_ expected claims so precision is meaningful                              |
 
 ## 2. Generation (`rubric-eval generate`, `rubric-eval review`)
 
@@ -127,14 +127,14 @@ least one sentence; 2–30 files; no file with a GitHub-omitted patch.
   cleared. Commit messages describe the real change and would otherwise leak it (lesson from
   `try-engine-adversarial.ts`).
 - `scope_lie` — appends one of a few phrasings ("No behavior change.", "Pure refactor, no
-  functional changes.") to a source with `changesBehavior: true`.
+  functional changes.") to a source flagged `true` in the data dir's `behavior.json` (a human-maintained `sourceId → boolean` map).
 - `claim_drop` — Claude proposes `{ claim, hunkIds }` from the source. Code removes those whole
   hunks, recomputes `additions`/`deletions`, and drops files whose patch becomes empty. Partial-hunk
   edits are never made, so hunk headers stay valid.
 - `smuggle` — choose a template (~6: `disable-check`, `widen-auth`, `telemetry-call`,
   `skip-validation`, ...) and a target file in the diff. Claude adapts the template into a hunk in
   that file's style; code inserts it as a new hunk at a valid position and updates counts.
-  `smuggleLines` is recorded.
+  `smuggleLines` is recorded. Templates are additions-only (we hold patches, not full files); the hunk is appended after the file's last hunk.
 
 LLM drafting calls are cached in `generation-cache/` keyed by (template, source, prompt hash), so
 regeneration is free.
@@ -173,10 +173,8 @@ rubric-eval run --split dev --config default --samples 3 --max-usd 5
 
 - **Configs** are named `EngineOptions` presets in `configs.ts`: `default`, `no-infer`, a model
   comparison preset, `budget-8k` (forces truncation). An experiment is one new entry.
-- **Pre-flight estimate**: input tokens via `countTokens` (free) × the price table, with worst-case
-  output tokens. If the estimate exceeds `--max-usd`, the run aborts before any paid call. Actual
-  spend is re-checked between cases and the run stops when the cap would be exceeded.
-- Concurrency 4 by default; retry with backoff on 429/529.
+- **Pre-flight estimate**: input tokens via `countTokens` (free) × the price table, plus an assumed output of `--assume-output-tokens` (default 6000) per case. Worst-case output would make every cap fail. If the estimate exceeds `--max-usd`, the run aborts before any paid call. Actual spend is checked before each job starts, so overshoot is bounded by the in-flight jobs (`concurrency`).
+- Concurrency 4 by default. 429/529 retries are the Anthropic SDK's built-in retry with backoff; anything still failing is recorded as an error outcome.
 
 ### Cache
 
