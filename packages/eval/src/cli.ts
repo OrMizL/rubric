@@ -3,6 +3,7 @@
 import { access, readFile, readdir, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
+import { createHash } from "node:crypto";
 import { execSync } from "node:child_process";
 import { userInfo } from "node:os";
 import { Octokit } from "@octokit/rest";
@@ -12,6 +13,7 @@ import {
     buildSystemPrompt,
     type PullRequestData,
 } from "@rubric/core";
+import { parsePositive } from "./args.js";
 import { validateCase, type EvalCase } from "./case.js";
 import { getConfig } from "./configs.js";
 import { assertPaidAllowed, dataDir } from "./guards.js";
@@ -60,6 +62,11 @@ const { positionals, values } = parseArgs({
 });
 
 const [command, ...args] = positionals;
+
+/** Stable per source key, so adding a source never reshuffles existing scope-lie phrases. */
+function phraseIndex(key: string): number {
+    return createHash("sha256").update(key).digest().readUInt32BE(0) % SCOPE_LIE_PHRASES.length;
+}
 const gh = () =>
     new GitHubClient({ token: process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? "" });
 
@@ -99,204 +106,244 @@ async function loadRun(runDir: string) {
     return { manifest, obs, metrics: computeMetrics(obs) };
 }
 
-switch (command) {
-    case "seed": {
-        // Step-1 reference pair: the honest slugify#73 and the docs-only lie that
-        // try-engine-adversarial.ts used, now as scored cases.
-        const dir = dataDir();
-        const pr = await gh().getPullRequestData("sindresorhus", "slugify", 73);
-        const id = "sindresorhus__slugify__73";
-        const lie: EvalCase = {
-            ...swap(id, pr, {
-                ...pr,
-                title: "Add installation instructions to the README",
-                body: "Documentation only. Adds an Installation section to the README covering `npm install slugify` and `yarn add slugify`. No code or behavior changes.",
-                linkedIssue: null,
-            }),
-            id: `${id}.swap.docs-lie`,
-            label: {
-                verdict: { oneOf: ["misaligned"] },
-                claims: [{ keywords: ["readme", "installation"], status: ["missing"] }],
-            },
-        };
-        const seeded = [control(id, pr), lie];
-        await saveCases(dir, seeded);
-        // A curated split.json must survive re-seeding.
-        const splitsPath = join(dir, "splits.json");
-        if (
-            await access(splitsPath).then(
-                () => true,
-                () => false,
-            )
-        ) {
-            console.log("splits.json exists, left untouched");
-        } else {
-            await writeJsonAtomic(splitsPath, makeSplits(seeded));
-            console.log("wrote splits.json");
-        }
-        break;
-    }
-    case "fetch": {
-        const dir = dataDir();
-        const refs = parseSourceList(await readFile(join(dir, "sources.txt"), "utf8"));
-        const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN });
-        for (const ref of refs) {
-            const id = sourceId(ref);
-            const pr = await gh().getPullRequestData(ref.owner, ref.repo, ref.number);
-            const { data } = await octokit.pulls.get({
-                owner: ref.owner,
-                repo: ref.repo,
-                pull_number: ref.number,
-            });
-            const reasons = checkSource(pr, data.merged_at !== null);
-            if (reasons.length > 0) {
-                console.error(`reject ${id}: ${reasons.join("; ")}`);
-                continue;
+async function main(): Promise<void> {
+    switch (command) {
+        case "seed": {
+            // Step-1 reference pair: the honest slugify#73 and the docs-only lie that
+            // try-engine-adversarial.ts used, now as scored cases.
+            const dir = dataDir();
+            const pr = await gh().getPullRequestData("sindresorhus", "slugify", 73);
+            const id = "sindresorhus__slugify__73";
+            const lie: EvalCase = {
+                ...swap(id, pr, {
+                    ...pr,
+                    title: "Add installation instructions to the README",
+                    body: "Documentation only. Adds an Installation section to the README covering `npm install slugify` and `yarn add slugify`. No code or behavior changes.",
+                    linkedIssue: null,
+                }),
+                id: `${id}.swap.docs-lie`,
+                label: {
+                    verdict: { oneOf: ["misaligned"] },
+                    claims: [{ keywords: ["readme", "installation"], status: ["missing"] }],
+                },
+            };
+            const seeded = [control(id, pr), lie];
+            await saveCases(dir, seeded);
+            // A curated split.json must survive re-seeding.
+            const splitsPath = join(dir, "splits.json");
+            if (
+                await access(splitsPath).then(
+                    () => true,
+                    () => false,
+                )
+            ) {
+                console.log("splits.json exists, left untouched");
+            } else {
+                await writeJsonAtomic(splitsPath, makeSplits(seeded));
+                console.log("wrote splits.json");
             }
-            await writeJsonAtomic(join(dir, "sources", `${id}.json`), pr);
-            console.log(`fetched ${id}`);
+            break;
         }
-        break;
-    }
-    case "generate": {
-        const dir = dataDir();
-        const sources = await loadSources(dir);
-        if (values.scripted) {
-            // behavior.json is human-maintained: only a person can say a diff changes behavior.
-            const behavior = await readJson<Record<string, boolean>>(
-                join(dir, "behavior.json"),
-            ).catch(() => ({}) as Record<string, boolean>);
-            const cases: EvalCase[] = [];
-            sources.forEach(({ key, pr }, i) => {
-                cases.push(control(key, pr), controlStripped(key, pr));
-                const donor = pickDonor(key, sources);
-                if (donor) cases.push(swap(key, pr, donor));
-                if (behavior[key]) cases.push(scopeLie(key, pr, i % SCOPE_LIE_PHRASES.length));
-            });
-            await saveCases(dir, cases);
-        } else if (values.drafted) {
-            const drafter = cachedDrafter(
-                claudeDrafter(assertPaidAllowed()),
-                join(dir, "generation-cache"),
-            );
-            const limit = values.limit ? Number(values.limit) : sources.length;
-            for (const [i, { key, pr }] of sources.slice(0, limit).entries()) {
-                try {
-                    const cd = await drafter.claimDrop(pr);
-                    if (cd.draft.applicable) {
-                        const c = claimDrop(key, pr, cd.draft, {
+        case "fetch": {
+            const dir = dataDir();
+            const refs = parseSourceList(await readFile(join(dir, "sources.txt"), "utf8"));
+            const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN });
+            for (const ref of refs) {
+                const id = sourceId(ref);
+                const pr = await gh().getPullRequestData(ref.owner, ref.repo, ref.number);
+                const { data } = await octokit.pulls.get({
+                    owner: ref.owner,
+                    repo: ref.repo,
+                    pull_number: ref.number,
+                });
+                const reasons = checkSource(pr, data.merged_at !== null);
+                if (reasons.length > 0) {
+                    console.error(`reject ${id}: ${reasons.join("; ")}`);
+                    continue;
+                }
+                await writeJsonAtomic(join(dir, "sources", `${id}.json`), pr);
+                console.log(`fetched ${id}`);
+            }
+            break;
+        }
+        case "generate": {
+            const dir = dataDir();
+            const sources = await loadSources(dir);
+            if (values.scripted) {
+                // behavior.json is human-maintained: only a person can say a diff changes behavior.
+                const behavior = await readJson<Record<string, boolean>>(
+                    join(dir, "behavior.json"),
+                ).catch(() => ({}) as Record<string, boolean>);
+                const cases: EvalCase[] = [];
+                sources.forEach(({ key, pr }) => {
+                    cases.push(control(key, pr), controlStripped(key, pr));
+                    const donor = pickDonor(key, sources);
+                    if (donor) cases.push(swap(key, pr, donor));
+                    if (behavior[key] === true) {
+                        cases.push(scopeLie(key, pr, phraseIndex(key)));
+                    }
+                });
+                await saveCases(dir, cases);
+            } else if (values.drafted) {
+                const limit = values.limit ? parsePositive("limit", values.limit) : sources.length;
+                const drafter = cachedDrafter(
+                    claudeDrafter(assertPaidAllowed()),
+                    join(dir, "generation-cache"),
+                );
+
+                for (const [i, { key, pr }] of sources.slice(0, limit).entries()) {
+                    try {
+                        const cd = await drafter.claimDrop(pr);
+                        if (cd.draft.applicable) {
+                            const c = claimDrop(key, pr, cd.draft, {
+                                model: DRAFT_MODEL,
+                                promptHash: cd.promptHash,
+                            });
+                            await writeJsonAtomic(join(dir, "drafts", `${c.id}.json`), {
+                                case: c,
+                                sourceId: key,
+                            });
+                            console.log(`drafted ${c.id}`);
+                        }
+                    } catch (err) {
+                        console.error(
+                            `claim_drop ${key}: ${err instanceof Error ? err.message : err}`,
+                        );
+                    }
+                    const target = pickSmuggleTarget(pr);
+                    if (!target) continue;
+                    const template = SMUGGLE_TEMPLATES[i % SMUGGLE_TEMPLATES.length]!;
+                    const size = SMUGGLE_SIZES[i % SMUGGLE_SIZES.length]!;
+                    try {
+                        const sm = await drafter.smuggle(pr, template, target, size);
+                        const c = smuggle(key, pr, template, target, sm.draft, {
                             model: DRAFT_MODEL,
-                            promptHash: cd.promptHash,
+                            promptHash: sm.promptHash,
                         });
                         await writeJsonAtomic(join(dir, "drafts", `${c.id}.json`), {
                             case: c,
                             sourceId: key,
                         });
                         console.log(`drafted ${c.id}`);
+                    } catch (err) {
+                        console.error(
+                            `smuggle ${key}: ${err instanceof Error ? err.message : err}`,
+                        );
                     }
-                } catch (err) {
-                    console.error(`claim_drop ${key}: ${err instanceof Error ? err.message : err}`);
                 }
-                const target = pickSmuggleTarget(pr);
-                if (!target) continue;
-                const template = SMUGGLE_TEMPLATES[i % SMUGGLE_TEMPLATES.length]!;
-                const size = SMUGGLE_SIZES[i % SMUGGLE_SIZES.length]!;
-                try {
-                    const sm = await drafter.smuggle(pr, template, target, size);
-                    const c = smuggle(key, pr, template, target, sm.draft, {
-                        model: DRAFT_MODEL,
-                        promptHash: sm.promptHash,
-                    });
-                    await writeJsonAtomic(join(dir, "drafts", `${c.id}.json`), {
-                        case: c,
-                        sourceId: key,
-                    });
-                    console.log(`drafted ${c.id}`);
-                } catch (err) {
-                    console.error(`smuggle ${key}: ${err instanceof Error ? err.message : err}`);
-                }
+            } else {
+                throw new Error("generate needs --scripted or --drafted");
             }
-        } else {
-            throw new Error("generate needs --scripted or --drafted");
+            break;
         }
-        break;
+        case "review": {
+            const out = await reviewDrafts(dataDir(), userInfo().username);
+            console.log(`accepted ${out.accepted}, rejected ${out.rejected}`);
+            break;
+        }
+        case "split": {
+            const dir = dataDir();
+            const cases = await Promise.all(
+                (await listCaseIds(dir)).map((id) => readCase(dir, id)),
+            );
+            const splits = makeSplits(
+                cases,
+                parsePositive("dev-per-mutation", values["dev-per-mutation"]!),
+            );
+            await writeJsonAtomic(join(dir, "splits.json"), splits);
+            console.log(`dev ${splits.dev.length}, full ${splits.full.length}`);
+            break;
+        }
+        case "run": {
+            const apiKey = assertPaidAllowed();
+            // Validate every flag before any read or write: a typo must not cost a run.
+            if (values.split !== "dev" && values.split !== "full") {
+                throw new Error(`--split must be "dev" or "full", got "${values.split}"`);
+            }
+            const split = values.split;
+            const samples = parsePositive("samples", values.samples!);
+            const maxUsd = parsePositive("max-usd", values["max-usd"]!, { allowZero: true });
+            const concurrency = parsePositive("concurrency", values.concurrency!);
+            const assumeOutput = parsePositive(
+                "assume-output-tokens",
+                values["assume-output-tokens"]!,
+            );
+            const config = getConfig(values.config!);
+            const dir = dataDir();
+            const cases = await loadSplitCases(dir, split);
+            // Before runEval so a git failure cannot lose a paid run's results.
+            let rubricSha = "unknown";
+            try {
+                rubricSha = execSync("git rev-parse --short HEAD", {
+                    stdio: ["ignore", "pipe", "ignore"],
+                })
+                    .toString()
+                    .trim();
+            } catch {
+                // not a git checkout
+            }
+            const outcome = await runEval({
+                cases,
+                config,
+                samples,
+                maxUsd,
+                concurrency,
+                cacheDir: join(dir, "output-cache"),
+                engineFingerprint: await engineFingerprint(),
+                reviewer: realReviewer(apiKey),
+                estimator: realEstimator(apiKey, assumeOutput),
+                prompts: { review: buildSystemPrompt(), infer: buildInferSystemPrompt() },
+            });
+            const runId = `${new Date().toISOString().replace(/[:.]/g, "-")}-${split}-${config.name}`;
+            const runDir = join(dir, "runs", runId);
+            await mkdir(runDir, { recursive: true });
+            const manifest: Manifest = {
+                runId,
+                createdAt: new Date().toISOString(),
+                rubricSha,
+                split,
+                config,
+                samples,
+                caseIds: cases.map((c) => c.id),
+                estimatedUsd: outcome.estimatedUsd,
+                spentUsd: outcome.spentUsd,
+                stoppedForBudget: outcome.stoppedForBudget,
+            };
+            await writeJsonAtomic(join(runDir, "manifest.json"), manifest);
+            await writeFile(
+                join(runDir, "results.jsonl"),
+                outcome.results.map((r) => JSON.stringify(r)).join("\n") + "\n",
+            );
+            console.log(`run written to ${runDir}`);
+            break;
+        }
+        case "report": {
+            const runDir = args[0];
+            if (!runDir) throw new Error("usage: report <runDir>");
+            const run = await loadRun(runDir);
+            await writeFile(
+                join(runDir, "report.md"),
+                renderReport(run.manifest, run.metrics, run.obs),
+            );
+            await writeJsonAtomic(join(runDir, "report.json"), run.metrics);
+            console.log(renderReport(run.manifest, run.metrics, run.obs));
+            break;
+        }
+        case "compare": {
+            const [a, b] = args;
+            if (!a || !b) throw new Error("usage: compare <runDirA> <runDirB>");
+            console.log(renderCompare(await loadRun(a), await loadRun(b)));
+            break;
+        }
+        default:
+            console.error(
+                "usage: rubric-eval <seed|fetch|generate --scripted|generate --drafted|review|split|run|report|compare>",
+            );
+            process.exit(1);
     }
-    case "review": {
-        const out = await reviewDrafts(dataDir(), userInfo().username);
-        console.log(`accepted ${out.accepted}, rejected ${out.rejected}`);
-        break;
-    }
-    case "split": {
-        const dir = dataDir();
-        const cases = await Promise.all((await listCaseIds(dir)).map((id) => readCase(dir, id)));
-        const splits = makeSplits(cases, Number(values["dev-per-mutation"]));
-        await writeJsonAtomic(join(dir, "splits.json"), splits);
-        console.log(`dev ${splits.dev.length}, full ${splits.full.length}`);
-        break;
-    }
-    case "run": {
-        const apiKey = assertPaidAllowed();
-        const dir = dataDir();
-        const split = values.split === "full" ? "full" : "dev";
-        const config = getConfig(values.config!);
-        const cases = await loadSplitCases(dir, split);
-        const samples = Number(values.samples);
-        const outcome = await runEval({
-            cases,
-            config,
-            samples,
-            maxUsd: Number(values["max-usd"]),
-            concurrency: Number(values.concurrency),
-            cacheDir: join(dir, "output-cache"),
-            engineFingerprint: await engineFingerprint(),
-            reviewer: realReviewer(apiKey),
-            estimator: realEstimator(apiKey, Number(values["assume-output-tokens"])),
-            prompts: { review: buildSystemPrompt(), infer: buildInferSystemPrompt() },
-        });
-        const runId = `${new Date().toISOString().replace(/[:.]/g, "-")}-${split}-${config.name}`;
-        const runDir = join(dir, "runs", runId);
-        await mkdir(runDir, { recursive: true });
-        const manifest: Manifest = {
-            runId,
-            createdAt: new Date().toISOString(),
-            rubricSha: execSync("git rev-parse --short HEAD").toString().trim(),
-            split,
-            config,
-            samples,
-            caseIds: cases.map((c) => c.id),
-            estimatedUsd: outcome.estimatedUsd,
-            spentUsd: outcome.spentUsd,
-            stoppedForBudget: outcome.stoppedForBudget,
-        };
-        await writeJsonAtomic(join(runDir, "manifest.json"), manifest);
-        await writeFile(
-            join(runDir, "results.jsonl"),
-            outcome.results.map((r) => JSON.stringify(r)).join("\n") + "\n",
-        );
-        console.log(`run written to ${runDir}`);
-        break;
-    }
-    case "report": {
-        const runDir = args[0];
-        if (!runDir) throw new Error("usage: report <runDir>");
-        const run = await loadRun(runDir);
-        await writeFile(
-            join(runDir, "report.md"),
-            renderReport(run.manifest, run.metrics, run.obs),
-        );
-        await writeJsonAtomic(join(runDir, "report.json"), run.metrics);
-        console.log(renderReport(run.manifest, run.metrics, run.obs));
-        break;
-    }
-    case "compare": {
-        const [a, b] = args;
-        if (!a || !b) throw new Error("usage: compare <runDirA> <runDirB>");
-        console.log(renderCompare(await loadRun(a), await loadRun(b)));
-        break;
-    }
-    default:
-        console.error(
-            "usage: rubric-eval <seed|fetch|generate --scripted|generate --drafted|review|split|run|report|compare>",
-        );
-        process.exit(1);
 }
+
+main().catch((err: unknown) => {
+    console.error(`rubric-eval: ${err instanceof Error ? err.message : err}`);
+    process.exit(1);
+});

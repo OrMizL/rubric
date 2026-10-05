@@ -160,4 +160,10 @@ describe("runEval", () => {
         expect(reviewer).not.toHaveBeenCalled();
         expect(again.results.every((r) => r.cached && r.error !== null)).toBe(true);
     });
+
+    it("rejects a non-finite or negative maxUsd before doing any work", async () => {
+        for (const maxUsd of [NaN, Infinity, -1]) {
+            await expect(runEval(opts({ maxUsd }))).rejects.toThrow(/maxUsd/);
+        }
+    });
 });

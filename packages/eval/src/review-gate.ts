@@ -1,6 +1,7 @@
 import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { createInterface } from "node:readline/promises";
+import { createInterface } from "node:readline";
+import type { Readable, Writable } from "node:stream";
 import { spawnSync } from "node:child_process";
 import type { PullRequestData } from "@rubric/core";
 import { CaseSchema, validateCase, type EvalCase } from "./case.js";
@@ -25,6 +26,15 @@ export function formatDraft(c: EvalCase, source: PullRequestData): string {
     ].join("\n");
 }
 
+export interface ReviewIo {
+    input: Readable;
+    output: Writable;
+    /** Opens the draft file for hand-editing; blocks until done. */
+    edit?: (path: string) => void;
+}
+
+const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
 /**
  * Only human-accepted drafts become cases. An LLM wrote these mutations; a person
  * confirming each one is what lets the label count as ground truth.
@@ -32,50 +42,90 @@ export function formatDraft(c: EvalCase, source: PullRequestData): string {
 export async function reviewDrafts(
     dataDir: string,
     reviewer: string,
+    io: ReviewIo = { input: process.stdin, output: process.stdout },
 ): Promise<{ accepted: number; rejected: number }> {
+    const edit =
+        io.edit ??
+        ((path: string) => {
+            spawnSync(process.env.EDITOR ?? "vi", [path], { stdio: "inherit" });
+        });
+    const say = (text: string) => io.output.write(text + "\n");
     const draftsDir = join(dataDir, "drafts");
     const names = (await readdir(draftsDir).catch(() => [] as string[])).filter((n) =>
         n.endsWith(".json"),
     );
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const rl = createInterface({ input: io.input, output: io.output });
+    // The async iterator ends on close, so EOF reads as null instead of a question that never resolves.
+    const lines = rl[Symbol.asyncIterator]();
+    const ask = async (prompt: string): Promise<string | null> => {
+        io.output.write(prompt);
+        const next = await lines.next();
+        return next.done ? null : next.value.trim();
+    };
     let accepted = 0;
     let rejected = 0;
     try {
         for (const name of names.sort()) {
             const path = join(draftsDir, name);
-            const { case: raw, sourceId } = await readJson<{ case: EvalCase; sourceId: string }>(
-                path,
-            );
-            const source = await readJson<PullRequestData>(
-                join(dataDir, "sources", `${sourceId}.json`),
-            );
-            let c = CaseSchema.parse(raw);
+            const st: { c: EvalCase | null; source: PullRequestData | null } = {
+                c: null,
+                source: null,
+            };
+            let sourceId = "";
+            let loadError = "";
+            // A hand-edited draft can be malformed; that must not abort the whole session.
+            const load = async () => {
+                try {
+                    const raw = await readJson<{ case: unknown; sourceId: string }>(path);
+                    sourceId = raw.sourceId;
+                    st.c = CaseSchema.parse(raw.case);
+                    st.source = await readJson<PullRequestData>(
+                        join(dataDir, "sources", `${sourceId}.json`),
+                    );
+                    loadError = "";
+                } catch (err) {
+                    st.c = null;
+                    loadError = message(err);
+                }
+            };
+            await load();
             for (;;) {
-                console.log("\n" + formatDraft(c, source));
-                const problems = validateCase(c);
-                if (problems.length > 0) console.log(`!! invalid: ${problems.join("; ")}`);
-                const answer = (
-                    await rl.question("[a]ccept / [r]eject / [e]dit / [s]kip / [q]uit: ")
-                ).trim();
-                if (answer === "a" && problems.length === 0) {
-                    await writeCase(dataDir, { ...c, meta: { ...c.meta, reviewedBy: reviewer } });
+                const { c: current, source } = st;
+                let problems: string[] = [];
+                if (current && source) {
+                    say("\n" + formatDraft(current, source));
+                    problems = validateCase(current);
+                    if (problems.length > 0) say(`!! invalid: ${problems.join("; ")}`);
+                } else {
+                    say(`\n!! cannot load ${name}: ${loadError}`);
+                }
+                const answer = await ask(
+                    current
+                        ? "[a]ccept / [r]eject / [e]dit / [s]kip / [q]uit: "
+                        : "[e]dit / [s]kip / [q]uit: ",
+                );
+                if (answer === null || answer === "q") return { accepted, rejected };
+                if (current && answer === "a" && problems.length === 0) {
+                    await writeCase(dataDir, {
+                        ...current,
+                        meta: { ...current.meta, reviewedBy: reviewer },
+                    });
                     await rm(path);
                     accepted++;
                     break;
                 }
-                if (answer === "r") {
+                if (current && answer === "r") {
                     await rm(path);
                     rejected++;
                     break;
                 }
                 if (answer === "e") {
-                    await writeJsonAtomic(path, { case: c, sourceId });
-                    spawnSync(process.env.EDITOR ?? "vi", [path], { stdio: "inherit" });
-                    c = CaseSchema.parse((await readJson<{ case: EvalCase }>(path)).case);
+                    if (current) await writeJsonAtomic(path, { case: current, sourceId });
+                    edit(path);
+                    await load();
                     continue;
                 }
                 if (answer === "s") break;
-                if (answer === "q") return { accepted, rejected };
             }
         }
     } finally {

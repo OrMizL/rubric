@@ -49,6 +49,10 @@ interface Job {
 }
 
 export async function runEval(opts: RunOptions): Promise<RunOutcome> {
+    // NaN would make every `> maxUsd` comparison false and disable the cap.
+    if (!Number.isFinite(opts.maxUsd) || opts.maxUsd < 0) {
+        throw new Error(`maxUsd must be a finite number >= 0, got ${opts.maxUsd}`);
+    }
     const log = opts.log ?? ((m: string) => console.error(`[eval] ${m}`));
     const results: ResultLine[] = [];
     const pending: Job[] = [];
