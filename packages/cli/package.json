@@ -34,7 +34,7 @@
   "scripts": {
     "dev": "tsx src/main.ts",
     "build": "tsup",
-    "prepublishOnly": "pnpm build",
+    "prepublishOnly": "tsup",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"
   },
