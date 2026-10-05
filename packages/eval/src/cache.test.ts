@@ -2,7 +2,15 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cacheKey, readCache, stableStringify, writeCache, type CachedResult } from "./cache.js";
+import { DEFAULT_MAX_DIFF_TOKENS } from "@rubric/core";
+import {
+    cacheKey,
+    engineFingerprint,
+    readCache,
+    stableStringify,
+    writeCache,
+    type CachedResult,
+} from "./cache.js";
 import { CONFIGS } from "./configs.js";
 import { makeCase } from "./fixtures.js";
 
@@ -12,6 +20,7 @@ const base = {
     reviewSystemPrompt: "R",
     inferSystemPrompt: "I",
     sampleIndex: 0,
+    engineFingerprint: "F",
 };
 
 describe("stableStringify", () => {
@@ -31,10 +40,25 @@ describe("cacheKey", () => {
         ["review prompt", { reviewSystemPrompt: "R2" }],
         ["infer prompt", { inferSystemPrompt: "I2" }],
         ["sample", { sampleIndex: 1 }],
+        ["engine fingerprint", { engineFingerprint: "F2" }],
+        ["budget", { config: CONFIGS["budget-8k"]! }],
         ["config", { config: CONFIGS["no-infer"]! }],
         ["input", { input: { ...base.input, title: "other" } }],
     ])("changes when the %s changes", (_name, over) => {
         expect(cacheKey({ ...base, ...over })).not.toBe(cacheKey(base));
+    });
+});
+
+describe("cacheKey config resolution", () => {
+    it("treats an absent maxDiffTokens and the explicit default as the same run", () => {
+        const explicit = { ...base.config, maxDiffTokens: DEFAULT_MAX_DIFF_TOKENS };
+        expect(cacheKey({ ...base, config: explicit })).toBe(cacheKey(base));
+    });
+});
+
+describe("engineFingerprint", () => {
+    it("is a sha256 hex digest", async () => {
+        expect(await engineFingerprint()).toMatch(/^[0-9a-f]{64}$/);
     });
 });
 
@@ -62,6 +86,12 @@ describe("readCache / writeCache", () => {
 
     it("returns null on a miss", async () => {
         expect(await readCache(dir, "cd".padEnd(64, "0"))).toBeNull();
+    });
+
+    it("rethrows errors that are not a miss", async () => {
+        const key = "12".padEnd(64, "0");
+        await mkdir(join(dir, "12", `${key}.json`), { recursive: true });
+        await expect(readCache(dir, key)).rejects.toThrow();
     });
 
     it("treats a corrupt file as a miss", async () => {

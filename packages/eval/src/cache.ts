@@ -1,6 +1,14 @@
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { join } from "node:path";
-import type { EngineCall, PullRequestData, Review } from "@rubric/core";
+import {
+    DEFAULT_MAX_DIFF_TOKENS,
+    DEFAULT_MAX_OUTPUT_TOKENS,
+    type EngineCall,
+    type PullRequestData,
+    type Review,
+} from "@rubric/core";
 import type { EvalConfig } from "./configs.js";
 import { readJson, writeJsonAtomic } from "./store.js";
 
@@ -27,8 +35,22 @@ export function stableStringify(value: unknown): string {
 }
 
 /**
- * Prompt text is part of the key, so editing prompt.ts or infer.ts invalidates the
- * cache by construction — a stale cached output can never be scored as current.
+ * Hash of the built @rubric/core bundle. Any engine change must invalidate cached
+ * outputs, and the prompts alone don't cover user-prompt assembly or the
+ * filter/rank/budget logic.
+ */
+export async function engineFingerprint(): Promise<string> {
+    const file = createRequire(import.meta.url).resolve("@rubric/core");
+    return createHash("sha256")
+        .update(await readFile(file))
+        .digest("hex");
+}
+
+/**
+ * The key covers the PR input, the resolved config (defaults filled in so an absent
+ * budget and an explicit default are the same run), both system prompts, the engine
+ * fingerprint, and sampleIndex. Editing prompts or engine code therefore invalidates
+ * the cache by construction, so a stale output can never be scored as current.
  * sampleIndex makes repeat samples distinct calls while keeping reruns free.
  */
 export function cacheKey(parts: {
@@ -36,9 +58,18 @@ export function cacheKey(parts: {
     config: EvalConfig;
     reviewSystemPrompt: string;
     inferSystemPrompt: string;
+    engineFingerprint: string;
     sampleIndex: number;
 }): string {
-    return createHash("sha256").update(stableStringify(parts)).digest("hex");
+    const resolved = {
+        ...parts,
+        config: {
+            ...parts.config,
+            maxDiffTokens: parts.config.maxDiffTokens ?? DEFAULT_MAX_DIFF_TOKENS,
+            maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+        },
+    };
+    return createHash("sha256").update(stableStringify(resolved)).digest("hex");
 }
 
 function pathFor(cacheDir: string, key: string): string {
@@ -48,10 +79,12 @@ function pathFor(cacheDir: string, key: string): string {
 export async function readCache(cacheDir: string, key: string): Promise<CachedResult | null> {
     try {
         return await readJson<CachedResult>(pathFor(cacheDir, key));
-    } catch {
-        // Missing or unparseable (a crash before rename can't produce this, but a
-        // hand-edited or truncated file can): either way, recompute.
-        return null;
+    } catch (err) {
+        // Only a missing or unparseable file (hand-edited or truncated) is a miss;
+        // permission or IO errors must surface rather than silently recompute.
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code === "ENOENT" || err instanceof SyntaxError) return null;
+        throw err;
     }
 }
 
