@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { buildInferSystemPrompt, buildInferUserPrompt, inferSpec } from "./infer.js";
 import type { EngineCall } from "./infer.js";
 import type { ReviewContext } from "./context.js";
@@ -87,5 +87,21 @@ describe("inferSpec onCall", () => {
             inferSpec(ctx, { client: client as never, model: "m", onCall: (c) => calls.push(c) }),
         ).rejects.toThrow(/parse failed/);
         expect(calls).toHaveLength(1);
+    });
+});
+
+describe("inferSpec parse retry", () => {
+    it("retries once when the structured output fails to parse", async () => {
+        const parse = vi
+            .fn()
+            .mockRejectedValueOnce(new Error("Failed to parse structured output: bad kind"))
+            .mockResolvedValueOnce({
+                parsed_output: { items: [] },
+                stop_reason: "end_turn",
+                usage: { input_tokens: 1, output_tokens: 1 },
+            });
+        const spec = await inferSpec(ctx, { client: { messages: { parse } } as never, model: "m" });
+        expect(spec.items).toEqual([]);
+        expect(parse).toHaveBeenCalledTimes(2);
     });
 });

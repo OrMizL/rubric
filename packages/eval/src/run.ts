@@ -146,9 +146,11 @@ export async function runEval(opts: RunOptions): Promise<RunOutcome> {
                 ms: Date.now() - started,
                 error,
             };
-            // A parse failure is a model outcome worth pinning; transport/API errors are
-            // transient, so caching them would freeze an outage into every later run.
-            if (!error || /parse failed/i.test(error)) await writeCache(opts.cacheDir, result);
+            // A parse failure is a model outcome worth pinning (core already retried it
+            // once); transport/API errors are transient, so caching them would freeze an
+            // outage into every later run. Both the engine's and the SDK's wording count.
+            const parseFailure = error !== null && /parse failed|failed to parse/i.test(error);
+            if (!error || parseFailure) await writeCache(opts.cacheDir, result);
             results.push({ ...result, cached: false, costUsd: cost });
             log(
                 `${job.c.id}#${job.sampleIndex} ${error ? `ERROR ${error}` : review!.verdict} $${cost.toFixed(3)}`,

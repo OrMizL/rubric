@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import type { ReviewContext } from "./context.js";
+import { retryOnParseError } from "./retry.js";
 
 /**
  * One paid model call, as reported to an observer. Facts only: the hook exists so
@@ -103,20 +104,23 @@ export function buildInferUserPrompt(ctx: ReviewContext): string {
 
 /** Run the diff-blind inference call. Throws on parse failure; the engine degrades. */
 export async function inferSpec(ctx: ReviewContext, opts: InferOptions): Promise<ImpliedSpec> {
-    const started = Date.now();
-    const response = await opts.client.messages.parse({
-        model: opts.model,
-        max_tokens: opts.maxOutputTokens ?? DEFAULT_INFER_MAX_OUTPUT_TOKENS,
-        thinking: { type: "adaptive" },
-        system: buildInferSystemPrompt(),
-        messages: [{ role: "user", content: buildInferUserPrompt(ctx) }],
-        output_config: { format: zodOutputFormat(ImpliedSpecSchema) },
-    });
-    opts.onCall?.({
-        stage: "infer",
-        model: opts.model,
-        usage: response.usage,
-        ms: Date.now() - started,
+    const response = await retryOnParseError(async () => {
+        const started = Date.now();
+        const res = await opts.client.messages.parse({
+            model: opts.model,
+            max_tokens: opts.maxOutputTokens ?? DEFAULT_INFER_MAX_OUTPUT_TOKENS,
+            thinking: { type: "adaptive" },
+            system: buildInferSystemPrompt(),
+            messages: [{ role: "user", content: buildInferUserPrompt(ctx) }],
+            output_config: { format: zodOutputFormat(ImpliedSpecSchema) },
+        });
+        opts.onCall?.({
+            stage: "infer",
+            model: opts.model,
+            usage: res.usage,
+            ms: Date.now() - started,
+        });
+        return res;
     });
 
     if (!response.parsed_output) {

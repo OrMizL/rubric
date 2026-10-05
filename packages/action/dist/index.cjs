@@ -50997,6 +50997,17 @@ ${claimsTable(review, ctx)}`);
 <sub>Reviewed by Rubric \xB7 \`${ctx.model}\`${signalNote}${tokenNote}</sub>`);
   return parts.join("\n\n") + "\n";
 }
+function isStructuredOutputParseError(err) {
+  return err instanceof Error && !("status" in err) && err.message.startsWith("Failed to parse structured output");
+}
+async function retryOnParseError(attempt) {
+  try {
+    return await attempt();
+  } catch (err) {
+    if (!isStructuredOutputParseError(err)) throw err;
+    return attempt();
+  }
+}
 var SpecItemSchema = external_exports.object({
   text: external_exports.string().describe("A single expected behavior, stated concretely"),
   kind: external_exports.enum(["behavior", "edge_case", "acceptance"]),
@@ -51060,20 +51071,23 @@ function buildInferUserPrompt(ctx) {
   return sections.join("\n\n");
 }
 async function inferSpec(ctx, opts) {
-  const started = Date.now();
-  const response = await opts.client.messages.parse({
-    model: opts.model,
-    max_tokens: opts.maxOutputTokens ?? DEFAULT_INFER_MAX_OUTPUT_TOKENS,
-    thinking: { type: "adaptive" },
-    system: buildInferSystemPrompt(),
-    messages: [{ role: "user", content: buildInferUserPrompt(ctx) }],
-    output_config: { format: zodOutputFormat(ImpliedSpecSchema) }
-  });
-  opts.onCall?.({
-    stage: "infer",
-    model: opts.model,
-    usage: response.usage,
-    ms: Date.now() - started
+  const response = await retryOnParseError(async () => {
+    const started = Date.now();
+    const res = await opts.client.messages.parse({
+      model: opts.model,
+      max_tokens: opts.maxOutputTokens ?? DEFAULT_INFER_MAX_OUTPUT_TOKENS,
+      thinking: { type: "adaptive" },
+      system: buildInferSystemPrompt(),
+      messages: [{ role: "user", content: buildInferUserPrompt(ctx) }],
+      output_config: { format: zodOutputFormat(ImpliedSpecSchema) }
+    });
+    opts.onCall?.({
+      stage: "infer",
+      model: opts.model,
+      usage: res.usage,
+      ms: Date.now() - started
+    });
+    return res;
   });
   if (!response.parsed_output) {
     throw new Error(`Spec inference parse failed (stop_reason: ${response.stop_reason})`);
@@ -51129,16 +51143,19 @@ async function reviewPullRequest(context3, files, opts) {
     messages: [{ role: "user", content: user }]
   });
   log(`assembled prompt: ${input_tokens} input tokens (diff budget ${maxDiffTokens})`);
-  const started = Date.now();
-  const response = await client.messages.parse({
-    model,
-    max_tokens: opts.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
-    thinking: { type: "adaptive" },
-    system,
-    messages: [{ role: "user", content: user }],
-    output_config: { format: zodOutputFormat(ReviewOutputSchema) }
+  const response = await retryOnParseError(async () => {
+    const started = Date.now();
+    const res = await client.messages.parse({
+      model,
+      max_tokens: opts.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+      thinking: { type: "adaptive" },
+      system,
+      messages: [{ role: "user", content: user }],
+      output_config: { format: zodOutputFormat(ReviewOutputSchema) }
+    });
+    opts.onCall?.({ stage: "review", model, usage: res.usage, ms: Date.now() - started });
+    return res;
   });
-  opts.onCall?.({ stage: "review", model, usage: response.usage, ms: Date.now() - started });
   if (!response.parsed_output) {
     throw new Error(`Review parse failed (stop_reason: ${response.stop_reason})`);
   }

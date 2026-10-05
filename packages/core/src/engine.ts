@@ -7,6 +7,7 @@ import { buildSystemPrompt, buildUserPrompt } from "./prompt.js";
 import { filterFiles, rankFiles, truncateToBudget } from "./budget.js";
 import { inferSpec, type ImpliedSpec, type EngineCall } from "./infer.js";
 import type { ChangedFile } from "./types.js";
+import { retryOnParseError } from "./retry.js";
 
 export const DEFAULT_MODEL = "claude-opus-5-5";
 export const DEFAULT_MAX_DIFF_TOKENS = 50_000;
@@ -98,16 +99,19 @@ export async function reviewPullRequest(
     });
     log(`assembled prompt: ${input_tokens} input tokens (diff budget ${maxDiffTokens})`);
 
-    const started = Date.now();
-    const response = await client.messages.parse({
-        model,
-        max_tokens: opts.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
-        thinking: { type: "adaptive" },
-        system,
-        messages: [{ role: "user", content: user }],
-        output_config: { format: zodOutputFormat(ReviewOutputSchema) },
+    const response = await retryOnParseError(async () => {
+        const started = Date.now();
+        const res = await client.messages.parse({
+            model,
+            max_tokens: opts.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+            thinking: { type: "adaptive" },
+            system,
+            messages: [{ role: "user", content: user }],
+            output_config: { format: zodOutputFormat(ReviewOutputSchema) },
+        });
+        opts.onCall?.({ stage: "review", model, usage: res.usage, ms: Date.now() - started });
+        return res;
     });
-    opts.onCall?.({ stage: "review", model, usage: response.usage, ms: Date.now() - started });
 
     if (!response.parsed_output) {
         throw new Error(`Review parse failed (stop_reason: ${response.stop_reason})`);

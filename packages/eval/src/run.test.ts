@@ -149,10 +149,13 @@ describe("runEval", () => {
         },
     );
 
-    it("serves a cached parse failure on rerun without calling the reviewer", async () => {
+    it.each([
+        "Review parse failed (stop_reason: max_tokens)",
+        "Failed to parse structured output: Invalid option",
+    ])("serves a cached parse failure on rerun without calling the reviewer (%s)", async (msg) => {
         const failing: Reviewer = async (_c, _cfg, onCall) => {
             onCall(call);
-            throw new Error("Review parse failed (stop_reason: max_tokens)");
+            throw new Error(msg);
         };
         await runEval(opts({ reviewer: failing }));
         const reviewer = vi.fn<Reviewer>();

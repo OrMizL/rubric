@@ -83,4 +83,22 @@ describe("reviewPullRequest onCall", () => {
         });
         expect(calls.map((c) => c.stage)).toEqual(["review"]);
     });
+
+    it("retries the review once when the structured output fails to parse", async () => {
+        parse.mockReset();
+        parse
+            .mockRejectedValueOnce(new Error("Failed to parse structured output: bad enum"))
+            .mockResolvedValueOnce({
+                parsed_output: reviewOutput,
+                stop_reason: "end_turn",
+                usage: { input_tokens: 900, output_tokens: 300 },
+            });
+        const review = await reviewPullRequest(context, files, {
+            anthropicApiKey: "k",
+            infer: false,
+            logger: () => {},
+        });
+        expect(review.verdict).toBe("aligned");
+        expect(parse).toHaveBeenCalledTimes(2);
+    });
 });
