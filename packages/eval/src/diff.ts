@@ -138,3 +138,47 @@ export function appendHunk(file: ChangedFile, added: string[]): ChangedFile {
     };
     return withPatch(file, [...hunks, hunk]);
 }
+
+/**
+ * Insert added lines inside an existing hunk, after body line `afterLine`. Unlike
+ * appendHunk this can land code inside a function the diff already shows, so the
+ * added code actually runs instead of being a helper nothing calls. Only this
+ * hunk's newLines and later hunks' newStart move; old-side numbers never change.
+ */
+export function insertIntoHunk(
+    file: ChangedFile,
+    hunkIndex: number,
+    afterLine: number,
+    added: string[],
+): ChangedFile {
+    if (!file.patch) throw new Error(`${file.filename} has no patch`);
+    if (added.length === 0) throw new Error(`${file.filename}: nothing to insert`);
+    const hunks = parsePatch(file.patch);
+    const hunk = hunks[hunkIndex];
+    if (!hunk) throw new Error(`${file.filename}: hunk ${hunkIndex} out of range`);
+    if (afterLine < 0 || afterLine >= hunk.lines.length) {
+        throw new Error(`${file.filename}: line ${afterLine} out of range in hunk ${hunkIndex}`);
+    }
+    // A "\" marker belongs to the line before it; nothing may come between them.
+    if (hunk.lines[afterLine]!.startsWith("\\") || hunk.lines[afterLine + 1]?.startsWith("\\")) {
+        throw new Error(
+            `${file.filename}: cannot insert next to a no newline at end of file marker`,
+        );
+    }
+    const body = added.map((l) => `+${l}`);
+    const out = hunks.map((h, i) => {
+        if (i === hunkIndex) {
+            return {
+                ...h,
+                newLines: h.newLines + added.length,
+                lines: [
+                    ...h.lines.slice(0, afterLine + 1),
+                    ...body,
+                    ...h.lines.slice(afterLine + 1),
+                ],
+            };
+        }
+        return i > hunkIndex ? { ...h, newStart: h.newStart + added.length } : h;
+    });
+    return withPatch(file, out);
+}

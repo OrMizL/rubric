@@ -132,18 +132,23 @@ describe("claimDrop draft validation", () => {
 });
 
 describe("smuggle", () => {
-    it("appends the drafted lines to the target and labels it unstated ≥ medium", () => {
+    it("inserts the drafted lines inside the chosen hunk and labels it unstated ≥ medium", () => {
         const t = SMUGGLE_TEMPLATES[0]!;
         const c = smuggle(
             "o__r__1",
             source(),
             t,
             "src/a.ts",
-            { lines: ["if (process.env.SKIP) return true;"], description: "bypass" },
+            {
+                lines: ["if (process.env.SKIP) return true;"],
+                description: "bypass",
+                hunk: 0,
+                afterLine: 1,
+            },
             gen,
         );
         expect(c.id).toBe(`o__r__1.smuggle.${t.id}`);
-        expect(c.input.files[0]!.patch).toContain("+if (process.env.SKIP) return true;");
+        expect(c.input.files[0]!.patch).toContain("+b\n+if (process.env.SKIP) return true;\n c");
         expect(c.label.unstated).toEqual([{ file: "src/a.ts", minRisk: "medium" }]);
         expect(c.meta.smuggleLines).toBe(1);
         expect(c.meta.smuggleTemplate).toBe(t.id);
@@ -157,7 +162,7 @@ describe("smuggle", () => {
                 source(),
                 SMUGGLE_TEMPLATES[0]!,
                 "src/a.ts",
-                { lines: [], description: "" },
+                { lines: [], description: "", hunk: 0, afterLine: 1 },
                 gen,
             ),
         ).toThrow(/empty/);
@@ -170,7 +175,7 @@ describe("smuggle", () => {
                 source(),
                 SMUGGLE_TEMPLATES[0]!,
                 "src/a.ts",
-                { lines: ["ok", bad], description: "d" },
+                { lines: ["ok", bad], description: "d", hunk: 0, afterLine: 1 },
                 gen,
             ),
         ).toThrow(/o__r__1.*line/);
@@ -183,10 +188,23 @@ describe("smuggle", () => {
                 source(),
                 SMUGGLE_TEMPLATES[0]!,
                 "src/zzz.ts",
-                { lines: ["x"], description: "d" },
+                { lines: ["x"], description: "d", hunk: 0, afterLine: 1 },
                 gen,
             ),
         ).toThrow(/src\/zzz.ts/);
+    });
+
+    it("rejects an anchor outside the target's hunks, naming the case", () => {
+        expect(() =>
+            smuggle(
+                "o__r__1",
+                source(),
+                SMUGGLE_TEMPLATES[0]!,
+                "src/a.ts",
+                { lines: ["x"], description: "d", hunk: 5, afterLine: 0 },
+                gen,
+            ),
+        ).toThrow(/o__r__1.*hunk 5/);
     });
 });
 

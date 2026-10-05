@@ -23,6 +23,13 @@ describe("prompts", () => {
         expect(user).toContain("10");
         expect(user).toContain("+b");
     });
+
+    it("smuggle prompt numbers each hunk's lines so the model can pick an anchor", () => {
+        const { user } = buildSmugglePrompt(pr, SMUGGLE_TEMPLATES[2]!, "src/a.ts", 10);
+        expect(user).toContain("Hunk 0");
+        expect(user).toMatch(/L1 \| \+b/);
+        expect(user).toMatch(/inside existing code/i);
+    });
 });
 
 it("claim-drop prompt omits files the reviewer never sees", () => {
@@ -51,7 +58,7 @@ function stubDrafter(): Drafter {
             promptHash: "h",
         })),
         smuggle: vi.fn(async () => ({
-            draft: { lines: ["x"], description: "d" },
+            draft: { lines: ["x"], description: "d", hunk: 0, afterLine: 0 },
             promptHash: "h",
         })),
     };
