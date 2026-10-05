@@ -28,6 +28,15 @@ describe("makeSplits", () => {
         expect(dev.filter((id) => id.endsWith(".swap"))).toHaveLength(2);
     });
 
+    it("rotates repos across mutations so dev covers every repo", () => {
+        const repos = "abcdefghijklm".split("");
+        const mutations: Mutation[] = ["control", "control_stripped", "swap", "scope_lie"];
+        const many = mutations.flatMap((m) => repos.map((r) => c(`${r}1.${m}`, r, m)));
+        const { dev } = makeSplits(many, 6);
+        expect(dev).toHaveLength(24);
+        expect(new Set(dev.map((id) => id[0])).size).toBe(13);
+    });
+
     it("is deterministic", () => {
         expect(makeSplits(cases, 4)).toEqual(makeSplits([...cases].reverse(), 4));
     });
