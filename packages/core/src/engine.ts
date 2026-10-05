@@ -5,7 +5,7 @@ import { scoreSignal } from "./confidence.js";
 import type { ReviewContext } from "./context.js";
 import { buildSystemPrompt, buildUserPrompt } from "./prompt.js";
 import { filterFiles, rankFiles, truncateToBudget } from "./budget.js";
-import { inferSpec, type ImpliedSpec } from "./infer.js";
+import { inferSpec, type ImpliedSpec, type EngineCall } from "./infer.js";
 import type { ChangedFile } from "./types.js";
 
 export const DEFAULT_MODEL = "claude-opus-4-8";
@@ -24,6 +24,8 @@ export interface EngineOptions {
     logger?: (message: string) => void;
     /** Run the diff-blind inference stage before the review. Default: true. */
     infer?: boolean;
+    /** Observer for each paid model call (infer and review). Reports facts; changes nothing. */
+    onCall?: (call: EngineCall) => void;
 }
 
 /**
@@ -63,7 +65,7 @@ export async function reviewPullRequest(
     let inferError: string | undefined;
     const [spec, budget] = await Promise.all([
         shouldInfer
-            ? inferSpec(context, { client, model }).catch((err: unknown) => {
+            ? inferSpec(context, { client, model, onCall: opts.onCall }).catch((err: unknown) => {
                   // A failed inference must not sink an otherwise valid review.
                   inferError = err instanceof Error ? err.message : String(err);
                   log(`spec inference failed, continuing with stated claims only: ${inferError}`);
@@ -96,6 +98,7 @@ export async function reviewPullRequest(
     });
     log(`assembled prompt: ${input_tokens} input tokens (diff budget ${maxDiffTokens})`);
 
+    const started = Date.now();
     const response = await client.messages.parse({
         model,
         max_tokens: opts.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
@@ -104,6 +107,7 @@ export async function reviewPullRequest(
         messages: [{ role: "user", content: user }],
         output_config: { format: zodOutputFormat(ReviewOutputSchema) },
     });
+    opts.onCall?.({ stage: "review", model, usage: response.usage, ms: Date.now() - started });
 
     if (!response.parsed_output) {
         throw new Error(`Review parse failed (stop_reason: ${response.stop_reason})`);

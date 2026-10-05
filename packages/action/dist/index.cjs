@@ -51060,6 +51060,7 @@ function buildInferUserPrompt(ctx) {
   return sections.join("\n\n");
 }
 async function inferSpec(ctx, opts) {
+  const started = Date.now();
   const response = await opts.client.messages.parse({
     model: opts.model,
     max_tokens: opts.maxOutputTokens ?? DEFAULT_INFER_MAX_OUTPUT_TOKENS,
@@ -51067,6 +51068,12 @@ async function inferSpec(ctx, opts) {
     system: buildInferSystemPrompt(),
     messages: [{ role: "user", content: buildInferUserPrompt(ctx) }],
     output_config: { format: zodOutputFormat(ImpliedSpecSchema) }
+  });
+  opts.onCall?.({
+    stage: "infer",
+    model: opts.model,
+    usage: response.usage,
+    ms: Date.now() - started
   });
   if (!response.parsed_output) {
     throw new Error(`Spec inference parse failed (stop_reason: ${response.stop_reason})`);
@@ -51095,7 +51102,7 @@ async function reviewPullRequest(context3, files, opts) {
   const shouldInfer = opts.infer ?? true;
   let inferError;
   const [spec, budget] = await Promise.all([
-    shouldInfer ? inferSpec(context3, { client, model }).catch((err) => {
+    shouldInfer ? inferSpec(context3, { client, model, onCall: opts.onCall }).catch((err) => {
       inferError = err instanceof Error ? err.message : String(err);
       log(`spec inference failed, continuing with stated claims only: ${inferError}`);
       return null;
@@ -51122,6 +51129,7 @@ async function reviewPullRequest(context3, files, opts) {
     messages: [{ role: "user", content: user }]
   });
   log(`assembled prompt: ${input_tokens} input tokens (diff budget ${maxDiffTokens})`);
+  const started = Date.now();
   const response = await client.messages.parse({
     model,
     max_tokens: opts.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
@@ -51130,6 +51138,7 @@ async function reviewPullRequest(context3, files, opts) {
     messages: [{ role: "user", content: user }],
     output_config: { format: zodOutputFormat(ReviewOutputSchema) }
   });
+  opts.onCall?.({ stage: "review", model, usage: response.usage, ms: Date.now() - started });
   if (!response.parsed_output) {
     throw new Error(`Review parse failed (stop_reason: ${response.stop_reason})`);
   }
