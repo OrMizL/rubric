@@ -2,6 +2,8 @@
 
 **Does this pull request actually do what it says it does?**
 
+<a href="https://rubric.ormiz.dev"><img src="docs/media/redline.gif" width="100%" alt="unjs/h3#1513: the description says an optimization was deliberately not implemented; Rubric links that sentence to the merged code that implements it and marks the claim contradicted."></a>
+
 [![Dogfood: PR #1 — Aligned](https://img.shields.io/badge/✅_Aligned-PR_%231-2ea44f)](https://github.com/OrMizL/rubric/pull/1)
 [![Dogfood: PR #2 — Misaligned](https://img.shields.io/badge/❌_Misaligned-PR_%232-d14836)](https://github.com/OrMizL/rubric/pull/2)
 [![CI](https://github.com/OrMizL/rubric/actions/workflows/ci.yml/badge.svg)](https://github.com/OrMizL/rubric/actions)
@@ -132,6 +134,11 @@ jobs:
 | `comment`            | `false`               | Post the review as a PR comment.                    |
 | `fail-on-misaligned` | `false`               | Fail the check when the verdict is misaligned.      |
 
+With `comment: true`, the review lands on the PR. This is the comment on this repo's trap
+PR [#2](https://github.com/OrMizL/rubric/pull/2), a code change described as docs-only:
+
+<img src="docs/media/github.gif" width="100%" alt="Scrolling PR #2 on GitHub: the description says documentation-only; the Rubric comment below it says Misaligned and lists the unmentioned source change.">
+
 By default the Action is **report-only** — it writes the review to the workflow
 job summary and never comments unless you set `comment: true`. Outputs `verdict`,
 `misaligned`, and `signal-score` let later steps branch on the result.
@@ -153,6 +160,10 @@ The CLI never writes to the PR, so it works on repositories you don't own.
 export ANTHROPIC_API_KEY=sk-ant-...
 npx @ormizl/rubric scan sindresorhus/slugify#73
 ```
+
+<img src="docs/media/terminal.gif" width="100%" alt="A real terminal run of npx @ormizl/rubric scan unjs/h3#1513, ending in a MISALIGNED verdict with contradicted claims and unstated changes. Waits are sped up.">
+
+A real run on unjs/h3#1513, waits sped up (it took 76 seconds).
 
 Requires Node 20+. From a clone: `pnpm install && pnpm --filter @ormizl/rubric build`, then
 `node packages/cli/dist/rubric.cjs scan …`.
