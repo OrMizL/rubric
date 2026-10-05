@@ -6,6 +6,36 @@ import type { Review } from "@rubric/core";
 
 const GITHUB_URL = "https://github.com/OrMizL/rubric";
 
+/** From docs/evaluation.md (run of 2026-10-05). Keep the two in sync. */
+const RESULTS = [
+    { test: "Honest pull requests wrongly called misaligned", result: "0 of 66", range: "0–5.5%" },
+    {
+        test: "Descriptions swapped with another project’s",
+        result: "35 of 35 caught",
+        range: "90–100%",
+    },
+    { test: "Code behind a stated promise deleted", result: "32 of 32 caught", range: "89–100%" },
+    { test: "Unmentioned risky change slipped in", result: "17 of 17 caught", range: "82–100%" },
+    { test: "False “no behavior change” added", result: "25 of 27 caught", range: "77–98%" },
+    { test: "Real mismatches found in merged pull requests", result: "2", range: "—" },
+];
+
+const ACTION_SNIPPET = `# .github/workflows/rubric.yml
+on: pull_request
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: OrMizL/rubric@v1
+        with:
+          anthropic-api-key: \${{ secrets.ANTHROPIC_API_KEY }}`;
+
+const CLI_SNIPPET = `export ANTHROPIC_API_KEY=sk-ant-...
+npx @ormizl/rubric scan unjs/h3#1513`;
+
 /** Verdict → toggle-dot tone, so each segment previews its outcome. */
 const VERDICT_TONE: Record<Review["verdict"], string> = {
     aligned: "aligned",
@@ -36,7 +66,7 @@ function BracketMark({ className }: { className?: string }) {
 }
 
 export function App() {
-    const [selectedId, setSelectedId] = useState<FixtureOption["id"]>("aligned");
+    const [selectedId, setSelectedId] = useState<FixtureOption["id"]>("real");
     const selected =
         fixtureOptions.find((option) => option.id === selectedId) ?? fixtureOptions[0]!;
 
@@ -50,12 +80,18 @@ export function App() {
                     </a>
                     <nav className="topbar__nav" aria-label="Primary">
                         <a className="navlink" href="#demo">
-                            How it works
+                            Example
+                        </a>
+                        <a className="navlink" href="#results">
+                            Results
+                        </a>
+                        <a className="navlink" href="#install">
+                            Install
                         </a>
                         <a className="navlink" href={GITHUB_URL} target="_blank" rel="noreferrer">
                             GitHub <span aria-hidden="true">↗</span>
                         </a>
-                        <span className="chip chip--version">v0.1 · MVP</span>
+                        <span className="chip chip--version">v1.0</span>
                     </nav>
                 </div>
             </header>
@@ -168,8 +204,78 @@ export function App() {
                             })}
                         </div>
 
+                        {selected.note ? <p className="panel__note">{selected.note}</p> : null}
                         <ReviewCard review={selected.review} />
                     </div>
+                </section>
+
+                <section id="results" className="results" aria-labelledby="results-title">
+                    <h2 id="results-title" className="section-title">
+                        Measured, not promised
+                    </h2>
+                    <p className="section-lede">
+                        We took 35 merged pull requests from 13 TypeScript and JavaScript projects
+                        and broke each one in a known way: swapped its description, deleted the code
+                        behind a promise, slipped in an unmentioned change. Then we checked whether
+                        Rubric noticed.
+                    </p>
+                    <table className="results__table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Test</th>
+                                <th scope="col">Result</th>
+                                <th scope="col" className="results__range">
+                                    95% range
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {RESULTS.map((row) => (
+                                <tr key={row.test}>
+                                    <td>{row.test}</td>
+                                    <td className="results__value">{row.result}</td>
+                                    <td className="results__range">{row.range}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    <p className="results__foot">
+                        About $0.15 and 47 seconds per pull request. Rows hold 17 to 35 cases each,
+                        so a perfect row means the real rate is probably above 85 to 90 percent, not
+                        that Rubric never misses.{" "}
+                        <a href={`${GITHUB_URL}/blob/main/docs/evaluation.md`}>
+                            How this was measured
+                        </a>
+                    </p>
+                </section>
+
+                <section id="install" className="install" aria-labelledby="install-title">
+                    <h2 id="install-title" className="section-title">
+                        Use it
+                    </h2>
+                    <div className="install__grid">
+                        <article className="install__item">
+                            <h3 className="install__title">On your repository</h3>
+                            <p className="install__desc">
+                                A GitHub Action that reviews every pull request. It reports in the
+                                job summary and only comments if you ask it to.
+                            </p>
+                            <pre className="code">
+                                <code>{ACTION_SNIPPET}</code>
+                            </pre>
+                        </article>
+                        <article className="install__item">
+                            <h3 className="install__title">On any pull request</h3>
+                            <p className="install__desc">
+                                A read-only command line tool. It never writes to the PR, so it
+                                works on repositories you don&apos;t own.
+                            </p>
+                            <pre className="code">
+                                <code>{CLI_SNIPPET}</code>
+                            </pre>
+                        </article>
+                    </div>
+                    <p className="install__foot">Both need an Anthropic API key. MIT licensed.</p>
                 </section>
             </main>
 
