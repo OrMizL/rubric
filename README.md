@@ -72,17 +72,28 @@ An honest PR gets a clean ✅
 
 ---
 
-## Validation: Rubric reviews Rubric
+## Evaluation
 
-The MVP was proven on its own repo with two deliberately-crafted PRs:
+Measured on 179 test cases built from 35 merged PRs across 13 TypeScript/JavaScript repositories.
+Each PR was mutated in a way that creates a known problem, so the right answer is known in advance.
+[Method, full results and caveats →](docs/evaluation.md)
 
-| PR                                            | Title                     | Actual diff                        | Rubric verdict |
-| --------------------------------------------- | ------------------------- | ---------------------------------- | -------------- |
-| [#1](https://github.com/OrMizL/rubric/pull/1) | Honest docs addition      | Just docs                          | ✅ Aligned     |
-| [#2](https://github.com/OrMizL/rubric/pull/2) | "docs-only change" (trap) | Added `formatTarget` code function | ❌ Misaligned  |
+| What was measured                        | Result      |
+| ---------------------------------------- | ----------- |
+| False alarms on honest PRs               | **0 / 66**  |
+| Swapped descriptions caught              | **35 / 35** |
+| Missing implementations caught           | **32 / 32** |
+| Smuggled risky changes caught            | **17 / 17** |
+| False "no behavior change" claims caught | **25 / 27** |
 
-Both verdict paths, and the live comment-write path, exercised end to end. It
-caught a lie that a human skimming the title would have merged.
+It also found **two real description–code mismatches in merged PRs**:
+[h3#1485](https://github.com/unjs/h3/pull/1485) and [h3#1513](https://github.com/unjs/h3/pull/1513).
+In both, the design changed during review and the description wasn't updated.
+
+About **$0.15 and 47 seconds per PR**. These are small samples (17–35 cases per row), so read a
+perfect score as "probably above ~85–90%", not "never misses". It also reviews its own PRs:
+[#1](https://github.com/OrMizL/rubric/pull/1) is honest, [#2](https://github.com/OrMizL/rubric/pull/2)
+is a deliberate trap.
 
 ---
 
@@ -213,12 +224,26 @@ GitHub PR ──► gather context ──┬─► infer spec (diff-blind) ─�
 
 ## Cost
 
-A typical review is two Claude calls — spec inference plus the review itself —
-roughly **$0.08–0.55** on `claude-opus-5-5` depending on diff size, capped by
-`max-diff-tokens` (default 50k tokens). That range is the earlier Opus 4.8 figure
-scaled by Opus 5.5's 20% lower per-token price; `packages/eval` measures the real
-number. `--no-infer` (CLI) or `infer: false` (Action) skips the inference call and
-roughly halves that. Using Sonnet 5.5 instead of Opus 5.5 halves the per-token price.
+A review is two Claude calls: spec inference, then the review itself. Measured on `claude-opus-5-5`
+across 179 PRs: **$0.146 per PR on average, $0.22 at the 90th percentile**, 47 seconds on average.
+Inference is about $0.03 of that, so `--no-infer` (CLI) or `infer: false` (Action) saves about 20%.
+Large diffs are capped by `max-diff-tokens` (default 50k tokens). Sonnet 5.5 has half the per-token
+price of Opus 5.5.
+
+---
+
+## Known limitations
+
+- **Large diffs are truncated.** Past `max-diff-tokens`, lower-priority files (tests, docs) are
+  omitted first, and the review says so. Claims about omitted files can't be verified.
+- **It judges the description, not the code's quality.** A PR that honestly describes a bad change
+  is "aligned". That's by design; use other tools for bugs and style.
+- **Thin descriptions give thin reviews.** With a one-line title and no body, Rubric infers what the
+  change should do and flags the result as low-signal.
+- **The model can decline.** Opus 5.5 occasionally refuses to work with code that looks like a
+  security bypass; the review then fails instead of guessing.
+- **Measured on TypeScript/JavaScript only.** Other languages should work but haven't been evaluated.
+- **Fork PRs need setup.** See the note under the GitHub Action section.
 
 ---
 
