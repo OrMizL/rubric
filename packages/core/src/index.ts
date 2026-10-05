@@ -75,3 +75,5 @@ export {
     type InferOptions,
     type EngineCall,
 } from "./infer.js";
+
+export { isStructuredOutputParseError, retryOnParseError } from "./retry.js";
