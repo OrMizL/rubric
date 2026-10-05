@@ -35,7 +35,15 @@ export async function readCase(dataDir: string, id: string): Promise<EvalCase> {
     } catch {
         throw new Error(`case "${id}" not found at ${path}`);
     }
-    return CaseSchema.parse(raw);
+    const parsed = CaseSchema.safeParse(raw);
+    if (!parsed.success) {
+        throw new Error(`case "${id}" at ${path} is malformed: ${parsed.error.message}`);
+    }
+    // A renamed or copied file would otherwise run under the wrong id and skew results.
+    if (parsed.data.id !== id) {
+        throw new Error(`case file for "${id}" at ${path} contains id "${parsed.data.id}"`);
+    }
+    return parsed.data;
 }
 
 export async function listCaseIds(dataDir: string): Promise<string[]> {

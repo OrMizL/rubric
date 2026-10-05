@@ -45,4 +45,37 @@ describe("validateCase", () => {
     it("flags a label with no anchors at all", () => {
         expect(validateCase(makeCase({ label: { verdict: {} } })).join()).toMatch(/no anchors/);
     });
+
+    it("flags meta.diffLines that disagrees with the files", () => {
+        const c = makeCase();
+        c.meta.diffLines = 99;
+        expect(validateCase(c).join()).toMatch(/diffLines/);
+    });
+
+    it("flags meta.fileCount that disagrees with the files", () => {
+        const c = makeCase();
+        c.meta.fileCount = 4;
+        expect(validateCase(c).join()).toMatch(/fileCount/);
+    });
+
+    it("flags a patch-less file that claims changes", () => {
+        const c = makeCase();
+        delete c.input.files[0]!.patch;
+        expect(validateCase(c).join()).toMatch(/src\/a\.ts has counts but no patch/);
+    });
+
+    it("allows a patch-less file with zero counts (binary)", () => {
+        const c = makeCase();
+        c.input.files[0] = { filename: "img.png", status: "added", additions: 0, deletions: 0 };
+        c.meta.diffLines = 0;
+        expect(validateCase(c)).toEqual([]);
+    });
+
+    it("flags hunk header counts that disagree with the body", () => {
+        const c = makeCase();
+        c.input.files[0]!.patch = "@@ -1,5 +1 @@\n-a\n+b";
+        expect(validateCase(c).join()).toMatch(
+            /src\/a\.ts hunk 0 header counts disagree with body/,
+        );
+    });
 });

@@ -100,13 +100,30 @@ export function computeMeta(input: PullRequestData): { diffLines: number; fileCo
 export function validateCase(c: EvalCase): string[] {
     const problems: string[] = [];
     for (const f of c.input.files) {
-        if (f.patch === undefined) continue;
+        if (f.patch === undefined) {
+            // Patch-less with 0/0 is a binary file; with counts it means the diff was lost.
+            if (f.additions !== 0 || f.deletions !== 0) {
+                problems.push(`${c.id}: ${f.filename} has counts but no patch`);
+            }
+            continue;
+        }
+        let hunks: ReturnType<typeof parsePatch>;
         try {
-            parsePatch(f.patch);
+            hunks = parsePatch(f.patch);
         } catch {
             problems.push(`${c.id}: patch for ${f.filename} does not parse`);
             continue;
         }
+        // A header whose counts disagree with its body is a diff the engine would read
+        // differently from what the counts claim; "\" lines belong to neither side.
+        hunks.forEach((h, i) => {
+            const ctx = h.lines.filter((l) => l.startsWith(" ")).length;
+            const del = h.lines.filter((l) => l.startsWith("-")).length;
+            const add = h.lines.filter((l) => l.startsWith("+")).length;
+            if (h.oldLines !== ctx + del || h.newLines !== ctx + add) {
+                problems.push(`${c.id}: ${f.filename} hunk ${i} header counts disagree with body`);
+            }
+        });
         const counted = countChanges(f.patch);
         if (counted.additions !== f.additions) {
             problems.push(
@@ -118,6 +135,13 @@ export function validateCase(c: EvalCase): string[] {
                 `${c.id}: ${f.filename} deletions ${f.deletions} != patch ${counted.deletions}`,
             );
         }
+    }
+    const meta = computeMeta(c.input);
+    if (c.meta.diffLines !== meta.diffLines) {
+        problems.push(`${c.id}: meta.diffLines ${c.meta.diffLines} != files ${meta.diffLines}`);
+    }
+    if (c.meta.fileCount !== meta.fileCount) {
+        problems.push(`${c.id}: meta.fileCount ${c.meta.fileCount} != files ${meta.fileCount}`);
     }
     const filenames = new Set(c.input.files.map((f) => f.filename));
     for (const u of c.label.unstated ?? []) {

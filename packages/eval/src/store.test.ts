@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { mkdtemp, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, writeFile, mkdir, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { listCaseIds, loadSplitCases, readCase, writeCase } from "./store.js";
@@ -41,5 +41,11 @@ describe("store", () => {
             JSON.stringify({ dev: ["o__r__1.control"], full: [] }),
         );
         await expect(loadSplitCases(dir, "dev")).rejects.toThrow(/additions/);
+    });
+
+    it("rejects a case file whose id differs from the requested id", async () => {
+        await writeCase(dir, makeCase({ id: "other" }));
+        await rename(join(dir, "cases", "other.json"), join(dir, "cases", "wanted.json"));
+        await expect(readCase(dir, "wanted")).rejects.toThrow(/wanted.*other|other.*wanted/);
     });
 });
