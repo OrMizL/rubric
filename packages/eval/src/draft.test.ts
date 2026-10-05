@@ -25,6 +25,25 @@ describe("prompts", () => {
     });
 });
 
+it("claim-drop prompt omits files the reviewer never sees", () => {
+    const withLock = {
+        ...pr,
+        files: [
+            ...pr.files,
+            {
+                filename: "pnpm-lock.yaml",
+                status: "modified" as const,
+                additions: 1,
+                deletions: 1,
+                patch: "@@ -1 +1 @@\n-q\n+zzz",
+            },
+        ],
+    };
+    const { user } = buildClaimDropPrompt(withLock);
+    expect(user).not.toContain("pnpm-lock.yaml");
+    expect(user).not.toContain("+zzz");
+});
+
 function stubDrafter(): Drafter {
     return {
         claimDrop: vi.fn(async () => ({
@@ -53,6 +72,22 @@ describe("cachedDrafter", () => {
         await d.smuggle(pr, SMUGGLE_TEMPLATES[0]!, "src/a.ts", 3);
         await d.smuggle(pr, SMUGGLE_TEMPLATES[0]!, "src/a.ts", 10);
         expect(inner.claimDrop).toHaveBeenCalledTimes(1);
+        expect(inner.smuggle).toHaveBeenCalledTimes(2);
+    });
+
+    it("keys on the real request: sources differing only in title are distinct", async () => {
+        const inner = stubDrafter();
+        const d = cachedDrafter(inner, dir);
+        await d.claimDrop(pr);
+        await d.claimDrop({ ...pr, title: "feat: something else" });
+        await d.smuggle(pr, SMUGGLE_TEMPLATES[0]!, "src/a.ts", 3);
+        await d.smuggle(
+            { ...pr, title: "feat: something else" },
+            SMUGGLE_TEMPLATES[0]!,
+            "src/a.ts",
+            3,
+        );
+        expect(inner.claimDrop).toHaveBeenCalledTimes(2);
         expect(inner.smuggle).toHaveBeenCalledTimes(2);
     });
 

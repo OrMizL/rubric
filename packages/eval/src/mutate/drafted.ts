@@ -24,16 +24,27 @@ export function claimDrop(
     generatedBy: { model: string; promptHash: string },
 ): EvalCase {
     if (!draft.applicable) throw new Error(`${id}: claim-drop draft marked not applicable`);
-    const all = source.files.flatMap((f) =>
-        f.patch ? parsePatch(f.patch).map((_, i) => hunkId(f.filename, i)) : [],
-    );
-    const unknown = draft.hunkIds.filter((h) => !all.includes(h));
+    if (draft.keywords.length === 0) throw new Error(`${id}: claim-drop draft has no keywords`);
+    const hunkIds = [...new Set(draft.hunkIds)];
+    if (hunkIds.length === 0) throw new Error(`${id}: claim-drop draft names no hunks`);
+    const idsOf = (files: PullRequestData["files"]) =>
+        files.flatMap((f) =>
+            f.patch ? parsePatch(f.patch).map((_, i) => hunkId(f.filename, i)) : [],
+        );
+    const everything = idsOf(source.files);
+    // The reviewer never sees filtered files, so dropping their hunks tests nothing.
+    const visible = idsOf(filterFiles(source.files));
+    const unknown = hunkIds.filter((h) => !everything.includes(h));
     if (unknown.length > 0) throw new Error(`${id}: unknown hunk ids ${unknown.join(", ")}`);
+    const hidden = hunkIds.filter((h) => !visible.includes(h));
+    if (hidden.length > 0) {
+        throw new Error(`${id}: hunk ids not visible to the reviewer: ${hidden.join(", ")}`);
+    }
     // Dropping everything would leave an empty diff, which tests nothing.
-    if (draft.hunkIds.length >= all.length) throw new Error(`${id}: draft removes every hunk`);
+    if (hunkIds.length >= visible.length) throw new Error(`${id}: draft removes every hunk`);
 
     const files = source.files.flatMap((f) => {
-        const idx = draft.hunkIds
+        const idx = hunkIds
             .filter((h) => h.slice(0, h.lastIndexOf("#")) === f.filename)
             .map((h) => Number(h.slice(h.lastIndexOf("#") + 1)));
         if (idx.length === 0) return [f];

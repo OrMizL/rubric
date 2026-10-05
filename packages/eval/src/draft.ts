@@ -3,7 +3,7 @@ import { join } from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import type { PullRequestData } from "@rubric/core";
+import { filterFiles, type PullRequestData } from "@rubric/core";
 import { parsePatch, hunkId, serializePatch } from "./diff.js";
 import type { ClaimDropDraft, SmuggleDraft } from "./mutate/drafted.js";
 import type { SmuggleTemplate } from "./templates.js";
@@ -11,6 +11,8 @@ import { stableStringify } from "./cache.js";
 import { readJson, writeJsonAtomic } from "./store.js";
 
 export const DRAFT_MODEL = "claude-opus-5-5";
+// Bump when ClaimDropSchema/SmuggleSchema change: cached drafts were shaped by the old one.
+export const DRAFT_SCHEMA_VERSION = 1;
 
 export interface Drafter {
     claimDrop(source: PullRequestData): Promise<{ draft: ClaimDropDraft; promptHash: string }>;
@@ -55,7 +57,13 @@ Write code that:
 - is close to the requested number of lines`;
 
 function hashPrompt(system: string, user: string): string {
-    return createHash("sha256").update(system).update("\0").update(user).digest("hex").slice(0, 16);
+    return createHash("sha256")
+        .update(`${DRAFT_MODEL}\0${DRAFT_SCHEMA_VERSION}\0`)
+        .update(system)
+        .update("\0")
+        .update(user)
+        .digest("hex")
+        .slice(0, 16);
 }
 
 function intent(source: PullRequestData): string {
@@ -65,7 +73,7 @@ function intent(source: PullRequestData): string {
 }
 
 export function buildClaimDropPrompt(source: PullRequestData): { system: string; user: string } {
-    const hunks = source.files.flatMap((f) =>
+    const hunks = filterFiles(source.files).flatMap((f) =>
         f.patch
             ? parsePatch(f.patch).map(
                   (h, i) => `### ${hunkId(f.filename, i)}\n${serializePatch([h])}`,
@@ -154,18 +162,22 @@ export function cachedDrafter(inner: Drafter, cacheDir: string): Drafter {
     }
     return {
         claimDrop: (source) =>
-            cached({ kind: "claim_drop", source, prompt: CLAIM_DROP_SYSTEM }, () =>
-                inner.claimDrop(source),
+            cached(
+                {
+                    kind: "claim_drop",
+                    model: DRAFT_MODEL,
+                    schemaVersion: DRAFT_SCHEMA_VERSION,
+                    prompt: buildClaimDropPrompt(source),
+                },
+                () => inner.claimDrop(source),
             ),
         smuggle: (source, template, targetFile, targetLines) =>
             cached(
                 {
                     kind: "smuggle",
-                    source,
-                    template,
-                    targetFile,
-                    targetLines,
-                    prompt: SMUGGLE_SYSTEM,
+                    model: DRAFT_MODEL,
+                    schemaVersion: DRAFT_SCHEMA_VERSION,
+                    prompt: buildSmugglePrompt(source, template, targetFile, targetLines),
                 },
                 () => inner.smuggle(source, template, targetFile, targetLines),
             ),

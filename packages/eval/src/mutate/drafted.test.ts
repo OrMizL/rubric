@@ -87,6 +87,50 @@ describe("claimDrop", () => {
     });
 });
 
+describe("claimDrop draft validation", () => {
+    const base = { applicable: true, claim: "x", keywords: ["x"], hunkIds: ["src/a.ts#0"] };
+
+    it("rejects empty hunkIds", () => {
+        expect(() => claimDrop("o__r__1", source(), { ...base, hunkIds: [] }, gen)).toThrow(
+            /o__r__1.*hunk/,
+        );
+    });
+
+    it("rejects empty keywords", () => {
+        expect(() => claimDrop("o__r__1", source(), { ...base, keywords: [] }, gen)).toThrow(
+            /o__r__1.*keywords/,
+        );
+    });
+
+    it("dedupes hunk ids: duplicates of all-but-one hunk are accepted", () => {
+        const hunkIds = ["src/a.ts#0", "src/a.ts#0", "src/a.ts#1", "src/a.ts#1"];
+        const c = claimDrop("o__r__1", source(), { ...base, hunkIds }, gen);
+        expect(c.input.files.map((f) => f.filename)).toEqual(["README.md"]);
+    });
+
+    it("dedupes hunk ids: duplicates covering every hunk are still rejected", () => {
+        const hunkIds = ["src/a.ts#0", "src/a.ts#1", "README.md#0", "README.md#0", "src/a.ts#0"];
+        expect(() => claimDrop("o__r__1", source(), { ...base, hunkIds }, gen)).toThrow(
+            /every hunk/,
+        );
+    });
+
+    it("rejects hunks of files the reviewer never sees", () => {
+        const pr = source();
+        const patch = "@@ -1 +1 @@\n-a\n+b";
+        pr.files.push({
+            filename: "pnpm-lock.yaml",
+            status: "modified",
+            additions: 1,
+            deletions: 1,
+            patch,
+        });
+        expect(() =>
+            claimDrop("o__r__1", pr, { ...base, hunkIds: ["pnpm-lock.yaml#0"] }, gen),
+        ).toThrow(/not visible to the reviewer/);
+    });
+});
+
 describe("smuggle", () => {
     it("appends the drafted lines to the target and labels it unstated ≥ medium", () => {
         const t = SMUGGLE_TEMPLATES[0]!;
