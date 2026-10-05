@@ -46,7 +46,7 @@ async function run(): Promise<void> {
         owner,
         repo,
         headSha: data.headSha,
-        model: model ?? "claude-opus-4-8",
+        model: model ?? "claude-opus-5-5",
     });
 
     // Always surface the report in the job summary, even in report-only mode.

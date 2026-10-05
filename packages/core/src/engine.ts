@@ -8,13 +8,13 @@ import { filterFiles, rankFiles, truncateToBudget } from "./budget.js";
 import { inferSpec, type ImpliedSpec, type EngineCall } from "./infer.js";
 import type { ChangedFile } from "./types.js";
 
-export const DEFAULT_MODEL = "claude-opus-4-8";
+export const DEFAULT_MODEL = "claude-opus-5-5";
 export const DEFAULT_MAX_DIFF_TOKENS = 50_000;
 export const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
 
 export interface EngineOptions {
     anthropicApiKey: string;
-    /** Claude model id. Default: claude-opus-4-8. */
+    /** Claude model id. Default: claude-opus-5-5. */
     model?: string;
     /** Input-token budget for the assembled diff. Default: 50000. */
     maxDiffTokens?: number;

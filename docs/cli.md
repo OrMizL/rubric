@@ -22,7 +22,7 @@ rubric <pr> [options]
 | `--markdown`            | Print the GitHub-flavored Markdown report.          |
 | `--no-infer`            | Skip spec inference; review stated claims only.     |
 | `--show-inferred-spec`  | Print the inferred specification before the review. |
-| `--model <id>`          | Claude model id (default: `claude-opus-4-8`).       |
+| `--model <id>`          | Claude model id (default: `claude-opus-5-5`).       |
 | `--max-diff-tokens <n>` | Token budget for the assembled diff.                |
 | `--fail-on-misaligned`  | Exit with code 2 when the verdict is misaligned.    |
 | `--no-color`            | Disable ANSI colors.                                |

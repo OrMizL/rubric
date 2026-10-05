@@ -115,7 +115,7 @@ jobs:
 | -------------------- | --------------------- | --------------------------------------------------- |
 | `anthropic-api-key`  | —                     | **Required.** Your Anthropic API key.               |
 | `github-token`       | `${{ github.token }}` | Reads the PR and (opt-in) posts the comment.        |
-| `model`              | `claude-opus-4-8`     | Claude model id.                                    |
+| `model`              | `claude-opus-5-5`     | Claude model id.                                    |
 | `max-diff-tokens`    | `50000`               | Token budget for the diff.                          |
 | `infer`              | `true`                | Infer the implied spec before reviewing (2nd call). |
 | `comment`            | `false`               | Post the review as a PR comment.                    |
@@ -204,10 +204,11 @@ GitHub PR ──► gather context ──┬─► infer spec (diff-blind) ─�
 ## Cost
 
 A typical review is two Claude calls — spec inference plus the review itself —
-roughly **$0.10–0.70** on `claude-opus-4-8` depending on diff size, capped by
-`max-diff-tokens` (default 50k tokens). `--no-infer` (CLI) or `infer: false`
-(Action) skips the inference call and roughly halves that. Using Sonnet
-instead of Opus cuts cost ~40%.
+roughly **$0.08–0.55** on `claude-opus-5-5` depending on diff size, capped by
+`max-diff-tokens` (default 50k tokens). That range is the earlier Opus 4.8 figure
+scaled by Opus 5.5's 20% lower per-token price; `packages/eval` measures the real
+number. `--no-infer` (CLI) or `infer: false` (Action) skips the inference call and
+roughly halves that. Using Sonnet 5.5 instead of Opus 5.5 halves the per-token price.
 
 ---
 

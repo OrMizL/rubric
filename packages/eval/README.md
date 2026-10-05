@@ -53,7 +53,7 @@ cases of existing ones.
 Paid commands need `ANTHROPIC_API_KEY` (use `node --env-file=.env` or export it) and refuse to
 run when `CI` is set. `run` prints an estimate and aborts if it exceeds `--max-usd`.
 
-Configs (`src/configs.ts`): `default`, `no-infer`, `opus-5-5`, `sonnet-5-5`, `budget-8k`.
+Configs (`src/configs.ts`): `default` (Opus 5.5), `no-infer`, `opus-4-8`, `sonnet-5-5`, `budget-8k`.
 
 ## Rules
 

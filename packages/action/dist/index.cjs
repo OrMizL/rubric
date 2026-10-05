@@ -51080,7 +51080,7 @@ async function inferSpec(ctx, opts) {
   }
   return response.parsed_output;
 }
-var DEFAULT_MODEL = "claude-opus-4-8";
+var DEFAULT_MODEL = "claude-opus-5-5";
 var DEFAULT_MAX_DIFF_TOKENS = 5e4;
 var DEFAULT_MAX_OUTPUT_TOKENS = 16e3;
 async function reviewPullRequest(context3, files, opts) {
@@ -51205,7 +51205,7 @@ async function run() {
     owner,
     repo,
     headSha: data.headSha,
-    model: model ?? "claude-opus-4-8"
+    model: model ?? "claude-opus-5-5"
   });
   await summary.addRaw(markdown).write();
   setOutput("verdict", review.verdict);
