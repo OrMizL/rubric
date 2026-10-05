@@ -12,6 +12,10 @@ export interface Manifest {
     estimatedUsd: number;
     spentUsd: number;
     stoppedForBudget: boolean;
+    /** Per-case sha256 of input+label at run time; report/compare refuse edited cases. */
+    caseHashes: Record<string, string>;
+    /** Set when a report was rendered with --allow-changed-cases. */
+    changedCases?: string[];
 }
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}`;
@@ -33,6 +37,12 @@ export function renderReport(manifest: Manifest, m: Metrics, obs: Observation[])
         `- ${m.cases} of ${planned} planned cases × ${m.samples} sample(s) = ${m.observations} observations · spent ${usd(manifest.spentUsd)} (estimated ${usd(manifest.estimatedUsd)})`,
         `- Rates show a 95% Wilson interval. At ~30 cases per row that is roughly ±14 points: treat small differences as noise.`,
     ];
+    if (manifest.changedCases && manifest.changedCases.length > 0) {
+        lines.push(
+            ``,
+            `> **Cases changed since this run** (--allow-changed-cases): ${manifest.changedCases.join(", ")}. Scores use the current cases, not the ones the model saw.`,
+        );
+    }
     if (manifest.stoppedForBudget || m.cases < planned) {
         const cause = manifest.stoppedForBudget ? " The run stopped at the spend cap." : "";
         lines.push(

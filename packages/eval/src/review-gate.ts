@@ -1,11 +1,11 @@
-import { readdir, rm } from "node:fs/promises";
+import { access, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import type { Readable, Writable } from "node:stream";
 import { spawnSync } from "node:child_process";
 import type { PullRequestData } from "@rubric/core";
 import { CaseSchema, validateCase, type EvalCase } from "./case.js";
-import { readJson, writeCase, writeJsonAtomic } from "./store.js";
+import { casesDir, readJson, writeCase, writeJsonAtomic } from "./store.js";
 
 export function formatDraft(c: EvalCase, source: PullRequestData): string {
     const before = new Map(source.files.map((f) => [f.filename, f.patch]));
@@ -106,6 +106,15 @@ export async function reviewDrafts(
                 );
                 if (answer === null || answer === "q") return { accepted, rejected };
                 if (current && answer === "a" && problems.length === 0) {
+                    // A case id is a frozen label: overwriting one would rewrite past runs' ground truth.
+                    const exists = await access(join(casesDir(dataDir), `${current.id}.json`)).then(
+                        () => true,
+                        () => false,
+                    );
+                    if (exists) {
+                        say(`!! case ${current.id} already exists, not overwriting; draft kept`);
+                        break;
+                    }
                     await writeCase(dataDir, {
                         ...current,
                         meta: { ...current.meta, reviewedBy: reviewer },

@@ -108,8 +108,11 @@ export function buildSmugglePrompt(
     };
 }
 
+export type DraftUsage = { input_tokens: number; output_tokens: number };
+
 async function parseWith<T>(
     client: Anthropic,
+    onUsage: ((usage: DraftUsage) => void) | undefined,
     prompt: { system: string; user: string },
     schema: z.ZodType<T>,
 ): Promise<T> {
@@ -121,23 +124,25 @@ async function parseWith<T>(
         messages: [{ role: "user", content: prompt.user }],
         output_config: { format: zodOutputFormat(schema) },
     });
+    // Report before the parse check: a failed parse was still billed.
+    onUsage?.(response.usage);
     if (!response.parsed_output) {
         throw new Error(`draft parse failed (stop_reason: ${response.stop_reason})`);
     }
     return response.parsed_output as T;
 }
 
-export function claudeDrafter(apiKey: string): Drafter {
+export function claudeDrafter(apiKey: string, onUsage?: (usage: DraftUsage) => void): Drafter {
     const client = new Anthropic({ apiKey });
     return {
         async claimDrop(source) {
             const prompt = buildClaimDropPrompt(source);
-            const draft = await parseWith(client, prompt, ClaimDropSchema);
+            const draft = await parseWith(client, onUsage, prompt, ClaimDropSchema);
             return { draft, promptHash: hashPrompt(prompt.system, prompt.user) };
         },
         async smuggle(source, template, targetFile, targetLines) {
             const prompt = buildSmugglePrompt(source, template, targetFile, targetLines);
-            const draft = await parseWith(client, prompt, SmuggleSchema);
+            const draft = await parseWith(client, onUsage, prompt, SmuggleSchema);
             return { draft, promptHash: hashPrompt(prompt.system, prompt.user) };
         },
     };

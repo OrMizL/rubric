@@ -42,7 +42,9 @@ import {
 import { claimDrop, pickSmuggleTarget, smuggle } from "./mutate/drafted.js";
 import { engineFingerprint } from "./cache.js";
 import { DRAFT_MODEL, cachedDrafter, claudeDrafter } from "./draft.js";
-import { SMUGGLE_SIZES, SMUGGLE_TEMPLATES } from "./templates.js";
+import { reachedCap, smuggleRotation } from "./generate.js";
+import { checkCaseHashes, hashCases, validateManifest } from "./manifest.js";
+import { costUsd } from "./pricing.js";
 import { reviewDrafts } from "./review-gate.js";
 
 const { positionals, values } = parseArgs({
@@ -58,6 +60,8 @@ const { positionals, values } = parseArgs({
         limit: { type: "string" },
         scripted: { type: "boolean", default: false },
         drafted: { type: "boolean", default: false },
+        force: { type: "boolean", default: false },
+        "allow-changed-cases": { type: "boolean", default: false },
     },
 });
 
@@ -95,13 +99,28 @@ async function saveCases(dir: string, cases: EvalCase[]): Promise<void> {
 }
 
 async function loadRun(runDir: string) {
-    const manifest = await readJson<Manifest>(join(runDir, "manifest.json"));
+    const manifestPath = join(runDir, "manifest.json");
+    const manifest = validateManifest(await readJson<unknown>(manifestPath), manifestPath);
     const results = (await readFile(join(runDir, "results.jsonl"), "utf8"))
         .split("\n")
         .filter(Boolean)
         .map((l) => JSON.parse(l) as ResultLine);
     const dir = dataDir();
-    const cases = await Promise.all(manifest.caseIds.map((id) => readCase(dir, id)));
+    // A missing case file also counts as changed: report the id rather than an ENOENT.
+    const cases = (
+        await Promise.all(manifest.caseIds.map((id) => readCase(dir, id).catch(() => null)))
+    ).filter((c): c is EvalCase => c !== null);
+    const changed = checkCaseHashes(manifest, cases);
+    if (changed.length > 0) {
+        const list = changed.join(", ");
+        if (!values["allow-changed-cases"]) {
+            throw new Error(
+                `cases changed or missing since run ${manifest.runId}: ${list} (pass --allow-changed-cases to score anyway)`,
+            );
+        }
+        console.error(`warning: scoring against changed cases: ${list}`);
+        manifest.changedCases = changed;
+    }
     const obs = toObservations(cases, results);
     return { manifest, obs, metrics: computeMetrics(obs) };
 }
@@ -148,22 +167,34 @@ async function main(): Promise<void> {
             const dir = dataDir();
             const refs = parseSourceList(await readFile(join(dir, "sources.txt"), "utf8"));
             const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN });
+            let fetched = 0;
+            let rejected = 0;
+            let failed = 0;
             for (const ref of refs) {
                 const id = sourceId(ref);
-                const pr = await gh().getPullRequestData(ref.owner, ref.repo, ref.number);
-                const { data } = await octokit.pulls.get({
-                    owner: ref.owner,
-                    repo: ref.repo,
-                    pull_number: ref.number,
-                });
-                const reasons = checkSource(pr, data.merged_at !== null);
-                if (reasons.length > 0) {
-                    console.error(`reject ${id}: ${reasons.join("; ")}`);
-                    continue;
+                // One bad ref (404, rate limit) must not abort the rest of the list.
+                try {
+                    const pr = await gh().getPullRequestData(ref.owner, ref.repo, ref.number);
+                    const { data } = await octokit.pulls.get({
+                        owner: ref.owner,
+                        repo: ref.repo,
+                        pull_number: ref.number,
+                    });
+                    const reasons = checkSource(pr, data.merged_at !== null);
+                    if (reasons.length > 0) {
+                        console.error(`reject ${id}: ${reasons.join("; ")}`);
+                        rejected++;
+                        continue;
+                    }
+                    await writeJsonAtomic(join(dir, "sources", `${id}.json`), pr);
+                    console.log(`fetched ${id}`);
+                    fetched++;
+                } catch (err) {
+                    console.error(`failed ${id}: ${err instanceof Error ? err.message : err}`);
+                    failed++;
                 }
-                await writeJsonAtomic(join(dir, "sources", `${id}.json`), pr);
-                console.log(`fetched ${id}`);
             }
+            console.log(`fetched ${fetched}, rejected ${rejected}, failed ${failed}`);
             break;
         }
         case "generate": {
@@ -171,9 +202,18 @@ async function main(): Promise<void> {
             const sources = await loadSources(dir);
             if (values.scripted) {
                 // behavior.json is human-maintained: only a person can say a diff changes behavior.
-                const behavior = await readJson<Record<string, boolean>>(
-                    join(dir, "behavior.json"),
-                ).catch(() => ({}) as Record<string, boolean>);
+                const behaviorPath = join(dir, "behavior.json");
+                // Only "absent" means empty: a typo'd file silently dropping every scope_lie is worse than failing.
+                const behavior = await readJson<Record<string, boolean>>(behaviorPath).catch(
+                    (err: unknown) => {
+                        if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+                            return {} as Record<string, boolean>;
+                        }
+                        throw new Error(
+                            `cannot read ${behaviorPath}: ${err instanceof Error ? err.message : err}`,
+                        );
+                    },
+                );
                 const cases: EvalCase[] = [];
                 sources.forEach(({ key, pr }) => {
                     cases.push(control(key, pr), controlStripped(key, pr));
@@ -185,13 +225,33 @@ async function main(): Promise<void> {
                 });
                 await saveCases(dir, cases);
             } else if (values.drafted) {
-                const limit = values.limit ? parsePositive("limit", values.limit) : sources.length;
+                // Validate before assertPaidAllowed or any read: drafting is paid and uncapped by default.
+                if (!values.limit) {
+                    throw new Error("generate --drafted requires --limit <n> (it spends money)");
+                }
+                const limit = parsePositive("limit", values.limit, { integer: true });
+                const maxUsd = parsePositive("max-usd", values["max-usd"]!, { allowZero: true });
+                const apiKey = assertPaidAllowed();
+                let spent = 0;
                 const drafter = cachedDrafter(
-                    claudeDrafter(assertPaidAllowed()),
+                    claudeDrafter(apiKey, (usage) => {
+                        spent += costUsd(DRAFT_MODEL, usage);
+                    }),
                     join(dir, "generation-cache"),
                 );
+                const report = (what: string, before: number) =>
+                    console.log(
+                        `${what}: $${(spent - before).toFixed(3)} (total $${spent.toFixed(3)} of $${maxUsd})`,
+                    );
 
-                for (const [i, { key, pr }] of sources.slice(0, limit).entries()) {
+                for (const { key, pr } of sources.slice(0, limit)) {
+                    if (reachedCap(spent, maxUsd)) {
+                        console.log(
+                            `stopped before ${key}: spent $${spent.toFixed(3)} reached --max-usd ${maxUsd}`,
+                        );
+                        break;
+                    }
+                    const claimBefore = spent;
                     try {
                         const cd = await drafter.claimDrop(pr);
                         if (cd.draft.applicable) {
@@ -210,10 +270,11 @@ async function main(): Promise<void> {
                             `claim_drop ${key}: ${err instanceof Error ? err.message : err}`,
                         );
                     }
+                    report(`claim_drop ${key}`, claimBefore);
                     const target = pickSmuggleTarget(pr);
                     if (!target) continue;
-                    const template = SMUGGLE_TEMPLATES[i % SMUGGLE_TEMPLATES.length]!;
-                    const size = SMUGGLE_SIZES[i % SMUGGLE_SIZES.length]!;
+                    const { template, size } = smuggleRotation(key);
+                    const smuggleBefore = spent;
                     try {
                         const sm = await drafter.smuggle(pr, template, target, size);
                         const c = smuggle(key, pr, template, target, sm.draft, {
@@ -230,6 +291,7 @@ async function main(): Promise<void> {
                             `smuggle ${key}: ${err instanceof Error ? err.message : err}`,
                         );
                     }
+                    report(`smuggle ${key}`, smuggleBefore);
                 }
             } else {
                 throw new Error("generate needs --scripted or --drafted");
@@ -243,14 +305,24 @@ async function main(): Promise<void> {
         }
         case "split": {
             const dir = dataDir();
+            const perMutation = parsePositive("dev-per-mutation", values["dev-per-mutation"]!, {
+                integer: true,
+            });
+            const splitsPath = join(dir, "splits.json");
+            // The dev/full boundary is a frozen artifact: re-splitting leaks tuned-on cases into "full".
+            const exists = await access(splitsPath).then(
+                () => true,
+                () => false,
+            );
+            if (exists && !values.force) {
+                throw new Error(`${splitsPath} exists; pass --force to overwrite it`);
+            }
+            if (exists) console.log(`overwriting ${splitsPath} (--force)`);
             const cases = await Promise.all(
                 (await listCaseIds(dir)).map((id) => readCase(dir, id)),
             );
-            const splits = makeSplits(
-                cases,
-                parsePositive("dev-per-mutation", values["dev-per-mutation"]!),
-            );
-            await writeJsonAtomic(join(dir, "splits.json"), splits);
+            const splits = makeSplits(cases, perMutation);
+            await writeJsonAtomic(splitsPath, splits);
             console.log(`dev ${splits.dev.length}, full ${splits.full.length}`);
             break;
         }
@@ -261,9 +333,11 @@ async function main(): Promise<void> {
                 throw new Error(`--split must be "dev" or "full", got "${values.split}"`);
             }
             const split = values.split;
-            const samples = parsePositive("samples", values.samples!);
+            const samples = parsePositive("samples", values.samples!, { integer: true });
             const maxUsd = parsePositive("max-usd", values["max-usd"]!, { allowZero: true });
-            const concurrency = parsePositive("concurrency", values.concurrency!);
+            const concurrency = parsePositive("concurrency", values.concurrency!, {
+                integer: true,
+            });
             const assumeOutput = parsePositive(
                 "assume-output-tokens",
                 values["assume-output-tokens"]!,
@@ -305,6 +379,7 @@ async function main(): Promise<void> {
                 config,
                 samples,
                 caseIds: cases.map((c) => c.id),
+                caseHashes: hashCases(cases),
                 estimatedUsd: outcome.estimatedUsd,
                 spentUsd: outcome.spentUsd,
                 stoppedForBudget: outcome.stoppedForBudget,

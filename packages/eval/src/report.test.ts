@@ -14,6 +14,7 @@ const manifest: Manifest = {
     estimatedUsd: 1,
     spentUsd: 0.5,
     stoppedForBudget: false,
+    caseHashes: {},
 };
 
 function obs(

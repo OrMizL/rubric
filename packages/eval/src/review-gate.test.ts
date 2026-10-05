@@ -102,3 +102,14 @@ describe("reviewDrafts", () => {
         expect(await review(dir, null)).toEqual({ accepted: 0, rejected: 0 });
     });
 });
+
+describe("reviewDrafts existing case", () => {
+    it("accepting a draft whose id already exists keeps the draft and does not overwrite", async () => {
+        const dir = await setup({ x: valid("o__r__1.control") });
+        await mkdir(join(dir, "cases"), { recursive: true });
+        await writeFile(join(dir, "cases", "o__r__1.control.json"), "ORIGINAL");
+        expect(await review(dir, ["a"])).toEqual({ accepted: 0, rejected: 0 });
+        expect(await readFile(join(dir, "cases", "o__r__1.control.json"), "utf8")).toBe("ORIGINAL");
+        expect(await names(dir, "drafts")).toEqual(["x.json"]);
+    });
+});
