@@ -1,20 +1,29 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Rubric — Does this PR do what it says it does?</title>
-    <meta
-      name="description"
-      content="Rubric is an AI code reviewer that checks a pull request's diff against the intent stated in its description — flagging missing, partial, or contradicted claims and any unstated changes."
-    />
-    <link
-      rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2317181A'/%3E%3Cg fill='none' stroke='%23FBFAF7' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11 7 H8 V25 H11'/%3E%3Cpath d='M21 7 H24 V25 H21'/%3E%3Cpath d='M12.5 16.5 L15 19 L20 12.5'/%3E%3C/g%3E%3C/svg%3E"
-    />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Rubric: does the pull request do what it says?</title>
+        <meta name="theme-color" content="#123a63" />
+        <meta property="og:title" content="Rubric: does the pull request do what it says?" />
+        <meta
+            property="og:description"
+            content="Checks a pull request's diff against its description. Every claim gets a verdict and a line of evidence."
+        />
+        <meta property="og:image" content="https://rubric.ormiz.dev/og.png" />
+        <meta property="og:url" content="https://rubric.ormiz.dev" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta
+            name="description"
+            content="Rubric checks whether a pull request's diff does what its description says: every claim gets a verdict and a line of evidence, and unmentioned changes get flagged."
+        />
+        <link
+            rel="icon"
+            href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23123A63'/%3E%3Cg fill='none' stroke-width='2.6' stroke-linecap='square'%3E%3Cpath d='M11 7 H8 V25 H11 M21 7 H24 V25 H21' stroke='%23FFFFFF'/%3E%3Cpath d='M12.5 16.5 L15 19 L20 12.5' stroke='%23FF4B2B'/%3E%3C/g%3E%3C/svg%3E"
+        />
+    </head>
+    <body>
+        <div id="root"></div>
+        <script type="module" src="/src/main.tsx"></script>
+    </body>
 </html>

@@ -1,22 +1,21 @@
 import { useState } from "react";
 
-import { ReviewCard } from "./ReviewCard";
-import { fixtureOptions, type FixtureOption } from "./fixtures";
-import type { Review } from "@rubric/core";
+import { Redline } from "./Redline";
+import { ReviewLedger } from "./ReviewLedger";
+import { TerminalReplay } from "./TerminalReplay";
+import { realCatchReview } from "./fixtures";
+import { CAST_TOTAL_SECONDS } from "./cast";
 
 const GITHUB_URL = "https://github.com/OrMizL/rubric";
+const EVAL_URL = `${GITHUB_URL}/blob/main/docs/evaluation.md`;
 
 /** From docs/evaluation.md (run of 2026-10-05). Keep the two in sync. */
 const RESULTS = [
-    { test: "Honest pull requests wrongly called misaligned", result: "0 of 66", range: "0–5.5%" },
-    {
-        test: "Descriptions swapped with another project’s",
-        result: "35 of 35 caught",
-        range: "90–100%",
-    },
-    { test: "Code behind a stated promise deleted", result: "32 of 32 caught", range: "89–100%" },
-    { test: "Unmentioned risky change slipped in", result: "17 of 17 caught", range: "82–100%" },
-    { test: "False “no behavior change” added", result: "25 of 27 caught", range: "77–98%" },
+    { test: "Honest pull requests wrongly called misaligned", result: "0 / 66", range: "0–5.5%" },
+    { test: "Descriptions swapped with another project’s", result: "35 / 35", range: "90–100%" },
+    { test: "Code behind a stated promise deleted", result: "32 / 32", range: "89–100%" },
+    { test: "Unmentioned risky change slipped in", result: "17 / 17", range: "82–100%" },
+    { test: "False “no behavior change” added", result: "25 / 27", range: "77–98%" },
     { test: "Real mismatches found in merged pull requests", result: "2", range: "—" },
 ];
 
@@ -34,192 +33,120 @@ jobs:
           anthropic-api-key: \${{ secrets.ANTHROPIC_API_KEY }}`;
 
 const CLI_SNIPPET = `export ANTHROPIC_API_KEY=sk-ant-...
-npx @ormizl/rubric scan unjs/h3#1513`;
+npx @ormizl/rubric scan owner/repo#123`;
 
-/** Verdict → toggle-dot tone, so each segment previews its outcome. */
-const VERDICT_TONE: Record<Review["verdict"], string> = {
-    aligned: "aligned",
-    partially_aligned: "partial",
-    misaligned: "misaligned",
-};
-
-/** Hand-made mark: a check nested inside a ruled bracket pair. */
-function BracketMark({ className }: { className?: string }) {
+/** A check inside a pair of brackets; the check is the one red stroke, like a grader's mark. */
+function Mark({ className }: { className?: string }) {
     return (
         <svg
             className={className}
             viewBox="0 0 32 32"
-            width="22"
-            height="22"
+            width="24"
+            height="24"
             fill="none"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+            strokeWidth="2.4"
+            strokeLinecap="square"
             aria-hidden="true"
         >
-            <path d="M11 7 H8 V25 H11" />
-            <path d="M21 7 H24 V25 H21" />
-            <path d="M12.5 16.5 L15 19 L20 12.5" />
+            <path d="M11 7 H8 V25 H11 M21 7 H24 V25 H21" stroke="currentColor" />
+            <path d="M12.5 16.5 L15 19 L20 12.5" stroke="var(--red)" />
         </svg>
     );
 }
 
+function Wordmark() {
+    return (
+        <a className="wordmark" href="#top" aria-label="Rubric home">
+            <Mark />
+            <span>RUBRIC</span>
+        </a>
+    );
+}
+
+const contradicted = realCatchReview.statedClaims.filter((c) => c.status === "contradicted").length;
+
 export function App() {
-    const [selectedId, setSelectedId] = useState<FixtureOption["id"]>("real");
-    const selected =
-        fixtureOptions.find((option) => option.id === selectedId) ?? fixtureOptions[0]!;
+    const [replay, setReplay] = useState(0);
 
     return (
         <div className="site">
-            <header className="topbar">
-                <div className="topbar__inner">
-                    <a className="wordmark" href="#top" aria-label="Rubric home">
-                        <BracketMark className="wordmark__mark" />
-                        <span className="wordmark__text">RUBRIC</span>
+            <header className="nav">
+                <Wordmark />
+                <nav aria-label="Primary">
+                    <a href="#review">The review</a>
+                    <a href="#results">Results</a>
+                    <a href="#install">Install</a>
+                    <a href={GITHUB_URL} target="_blank" rel="noreferrer">
+                        GitHub
                     </a>
-                    <nav className="topbar__nav" aria-label="Primary">
-                        <a className="navlink" href="#demo">
-                            Example
-                        </a>
-                        <a className="navlink" href="#results">
-                            Results
-                        </a>
-                        <a className="navlink" href="#install">
-                            Install
-                        </a>
-                        <a className="navlink" href={GITHUB_URL} target="_blank" rel="noreferrer">
-                            GitHub <span aria-hidden="true">↗</span>
-                        </a>
-                        <span className="chip chip--version">v1.0</span>
-                    </nav>
-                </div>
+                </nav>
             </header>
 
-            <main id="top" className="wrap">
+            <main id="top">
                 <section className="hero">
-                    <p className="eyebrow">PR Review · Intent vs. Implementation</p>
-                    <h1 className="hero__title">
-                        Does this pull request <em>actually</em> do what it says it does?
-                    </h1>
-                    <p className="hero__blurb">
-                        Rubric is an AI code reviewer that checks whether a pull request&apos;s diff
-                        delivers what its description claims. It extracts the concrete, checkable
-                        claims from the PR description, then verifies each one against the real diff
-                        — flagging missing, partial, or contradicted work, plus any unstated changes
-                        the description never mentioned.
+                    <h1 className="hero__title">Redline the pull request, not the code style.</h1>
+                    <p className="hero__lede">
+                        Rubric checks one thing: whether the diff does what the description says.
+                        Every claim gets a verdict and a line of evidence, and anything the
+                        description never mentions gets flagged.
                     </p>
                 </section>
 
-                <hr className="rule" />
-
-                <section className="legend" aria-label="Primitives">
-                    <article className="legend__item">
-                        <span className="legend__token">
-                            <span className="pill pill--aligned">
-                                <span className="pill__dot" aria-hidden="true" />
-                                Claim
-                            </span>
-                        </span>
-                        <h2 className="legend__title">Claim</h2>
-                        <p className="legend__desc">
-                            A discrete promise pulled from the PR description, checked against the
-                            diff and marked implemented, partial, missing, or contradicted.
-                        </p>
-                    </article>
-                    <article className="legend__item">
-                        <span className="legend__token">
-                            <span className="pill pill--partial">
-                                <span className="pill__dot" aria-hidden="true" />
-                                Unstated
-                            </span>
-                        </span>
-                        <h2 className="legend__title">Unstated change</h2>
-                        <p className="legend__desc">
-                            Something the diff does that no claim accounts for, surfaced with a risk
-                            level so silent behavior changes don&apos;t slip through.
-                        </p>
-                    </article>
-                    <article className="legend__item">
-                        <span className="legend__token">
-                            <span className="pill pill--misaligned">
-                                <span className="pill__dot" aria-hidden="true" />
-                                Verdict
-                            </span>
-                        </span>
-                        <h2 className="legend__title">Verdict</h2>
-                        <p className="legend__desc">
-                            One overall call — aligned, partially aligned, or misaligned — rolling
-                            up every claim into a single answer to the headline question.
-                        </p>
-                    </article>
+                <section className="catch" aria-label="A real catch">
+                    <Redline replay={replay} />
+                    <dl className="facts">
+                        <div>
+                            <dt>Verdict</dt>
+                            <dd className="facts__bad">misaligned</dd>
+                        </div>
+                        <div>
+                            <dt>Claims checked</dt>
+                            <dd>{realCatchReview.statedClaims.length}</dd>
+                        </div>
+                        <div>
+                            <dt>Contradicted</dt>
+                            <dd>{contradicted}</dd>
+                        </div>
+                        <div>
+                            <dt>Unmentioned changes</dt>
+                            <dd>{realCatchReview.unstatedChanges.length}</dd>
+                        </div>
+                    </dl>
+                    <p className="catch__caption">
+                        A merged pull request, reviewed as it was merged. The design changed during
+                        review; the description didn&apos;t. <a href="#review">Read the review</a>
+                        <button
+                            type="button"
+                            className="catch__replay"
+                            onClick={() => setReplay((r) => r + 1)}
+                        >
+                            Replay
+                        </button>
+                    </p>
                 </section>
 
-                <section id="demo" className="demo" aria-label="Example review">
-                    <div className="panel">
-                        <div className="panel__chrome">
-                            <div className="panel__chrome-left">
-                                <span className="dotrow" aria-hidden="true">
-                                    <i />
-                                    <i />
-                                    <i />
-                                </span>
-                                <code className="panel__repo">{selected.repo}</code>
-                                <span className="panel__sep" aria-hidden="true">
-                                    /
-                                </span>
-                                <code className="panel__branch">{selected.branch}</code>
-                            </div>
-                            <span className="panel__pr">#{selected.prNumber}</span>
-                        </div>
-
-                        <div className="panel__title">
-                            <span className="panel__title-kicker">Pull request under review</span>
-                            <p className="panel__title-text">{selected.prTitle}</p>
-                        </div>
-
-                        <div className="segmented" role="tablist" aria-label="Example review">
-                            {fixtureOptions.map((option) => {
-                                const active = option.id === selectedId;
-                                return (
-                                    <button
-                                        key={option.id}
-                                        type="button"
-                                        role="tab"
-                                        aria-selected={active}
-                                        className={
-                                            active
-                                                ? "segmented__btn segmented__btn--active"
-                                                : "segmented__btn"
-                                        }
-                                        onClick={() => setSelectedId(option.id)}
-                                    >
-                                        <span
-                                            className={`seg-dot seg-dot--${VERDICT_TONE[option.review.verdict]}`}
-                                            aria-hidden="true"
-                                        />
-                                        {option.label}
-                                    </button>
-                                );
-                            })}
-                        </div>
-
-                        {selected.note ? <p className="panel__note">{selected.note}</p> : null}
-                        <ReviewCard review={selected.review} />
+                <section id="review" className="section">
+                    <div className="section__head">
+                        <h2 className="section__title">Every claim, checked.</h2>
+                        <p className="section__lede">
+                            Rubric splits the title, description and linked issue into promises,
+                            gives each one a verdict against the diff, and lists what changed
+                            without being mentioned. Open any row for the reasoning.
+                        </p>
                     </div>
+                    <ReviewLedger />
                 </section>
 
-                <section id="results" className="results" aria-labelledby="results-title">
-                    <h2 id="results-title" className="section-title">
-                        Measured, not promised
-                    </h2>
-                    <p className="section-lede">
-                        We took 35 merged pull requests from 13 TypeScript and JavaScript projects
-                        and broke each one in a known way: swapped its description, deleted the code
-                        behind a promise, slipped in an unmentioned change. Then we checked whether
-                        Rubric noticed.
-                    </p>
-                    <table className="results__table">
+                <section id="results" className="section">
+                    <div className="section__head">
+                        <h2 className="section__title">Measured, not promised.</h2>
+                        <p className="section__lede">
+                            35 merged pull requests from 13 TypeScript and JavaScript projects, each
+                            broken in a known way: description swapped, the code behind a promise
+                            deleted, an unmentioned change slipped in. Then: did Rubric notice?
+                        </p>
+                    </div>
+                    <table className="results">
                         <thead>
                             <tr>
                                 <th scope="col">Test</th>
@@ -239,62 +166,81 @@ export function App() {
                             ))}
                         </tbody>
                     </table>
-                    <p className="results__foot">
+                    <p className="section__foot">
                         About $0.15 and 47 seconds per pull request. Rows hold 17 to 35 cases each,
                         so a perfect row means the real rate is probably above 85 to 90 percent, not
-                        that Rubric never misses.{" "}
-                        <a href={`${GITHUB_URL}/blob/main/docs/evaluation.md`}>
-                            How this was measured
-                        </a>
+                        that Rubric never misses. <a href={EVAL_URL}>How this was measured</a>
                     </p>
                 </section>
 
-                <section id="install" className="install" aria-labelledby="install-title">
-                    <h2 id="install-title" className="section-title">
-                        Use it
-                    </h2>
-                    <div className="install__grid">
-                        <article className="install__item">
-                            <h3 className="install__title">On your repository</h3>
-                            <p className="install__desc">
-                                A GitHub Action that reviews every pull request. It reports in the
-                                job summary and only comments if you ask it to.
-                            </p>
-                            <pre className="code">
-                                <code>{ACTION_SNIPPET}</code>
-                            </pre>
-                        </article>
-                        <article className="install__item">
-                            <h3 className="install__title">On any pull request</h3>
-                            <p className="install__desc">
-                                A read-only command line tool. It never writes to the PR, so it
-                                works on repositories you don&apos;t own.
+                <section id="install" className="section">
+                    <div className="section__head">
+                        <h2 className="section__title">Run it on any pull request.</h2>
+                        <p className="section__lede">
+                            A read-only command line tool, or a GitHub Action that reports in the
+                            job summary and only comments if you ask it to. Both need an Anthropic
+                            API key. MIT licensed.
+                        </p>
+                    </div>
+                    <div className="install">
+                        <figure className="install__media">
+                            <TerminalReplay />
+                            <figcaption>
+                                A real run, recorded October 5, 2026. Waits are sped up; it took{" "}
+                                {Math.round(CAST_TOTAL_SECONDS)} seconds.
+                            </figcaption>
+                        </figure>
+                        <div className="install__snippets">
+                            <h3>On any pull request</h3>
+                            <p>
+                                The command line tool only reads, so it works on repositories you
+                                don&apos;t own.
                             </p>
                             <pre className="code">
                                 <code>{CLI_SNIPPET}</code>
                             </pre>
-                        </article>
+                        </div>
                     </div>
-                    <p className="install__foot">Both need an Anthropic API key. MIT licensed.</p>
+                    <div className="install">
+                        <figure className="install__media">
+                            <video
+                                className="install__video"
+                                src="/github-comment.mp4"
+                                poster="/github-comment.jpg"
+                                autoPlay
+                                muted
+                                loop
+                                playsInline
+                                preload="metadata"
+                                aria-label="Pull request #2 on GitHub: the description says documentation-only, and Rubric's comment below it says Misaligned."
+                            />
+                            <figcaption>
+                                This repository&apos;s trap pull request{" "}
+                                <a href={`${GITHUB_URL}/pull/2`}>#2</a>: a code change described as
+                                docs-only, and the comment Rubric left on it.
+                            </figcaption>
+                        </figure>
+                        <div className="install__snippets">
+                            <h3>On every pull request in your repository</h3>
+                            <p>
+                                The GitHub Action writes the review to the job summary. Add{" "}
+                                <code>comment: true</code> to post it on the pull request instead.
+                            </p>
+                            <pre className="code">
+                                <code>{ACTION_SNIPPET}</code>
+                            </pre>
+                        </div>
+                    </div>
                 </section>
             </main>
 
             <footer className="footer">
-                <div className="footer__inner">
-                    <a className="wordmark wordmark--sm" href="#top" aria-label="Rubric home">
-                        <BracketMark className="wordmark__mark" />
-                        <span className="wordmark__text">RUBRIC</span>
-                    </a>
-                    <p className="footer__line">
-                        Does this pull request actually do what it says it does?
-                    </p>
-                    <div className="footer__links">
-                        <a href={GITHUB_URL} target="_blank" rel="noreferrer">
-                            GitHub <span aria-hidden="true">↗</span>
-                        </a>
-                        <span className="footer__credit">Built by Or Mizrahi</span>
-                    </div>
-                </div>
+                <Wordmark />
+                <p>Does the pull request do what it says?</p>
+                <a href={GITHUB_URL} target="_blank" rel="noreferrer">
+                    GitHub
+                </a>
+                <p>Built by Or Mizrahi</p>
             </footer>
         </div>
     );

@@ -131,6 +131,7 @@ Consumers: `packages/action/src/main.ts` (job summary always; PR comment opt-in)
 - Comments explain _why_ a rule exists (see `budget.ts`, tsup configs), not what the line does. Match that density.
 - Default model id lives in three places that must stay in sync: `DEFAULT_MODEL` in `engine.ts`, the `model` default in the root `action.yml`, and the fallback in `packages/action/src/main.ts`.
 - `apps/web` imports review fixtures by relative path from `packages/core/src/__fixtures__/`. Renaming those files breaks the web build.
+- `apps/web/src/cast.ts` is a verbatim recording of a real CLI run (regenerate, don't hand-edit). `?clip=redline|terminal|card` renders the framed views that `apps/web/scripts/record-clips.mjs` turns into `docs/media/*.gif`, the social card, and `apps/web/public/og.png` (needs ffmpeg and a Playwright Chromium; free, no API calls).
 
 ## Dogfooding
 
